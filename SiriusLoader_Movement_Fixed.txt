@@ -1721,20 +1721,19 @@ do
 ExtrasTab:Section("Быстрые действия")
 local function CopyValue(label, value)
     local payload = tostring(value)
-    local writers = {
-        setclipboard,
-        toclipboard,
-        writeclipboard,
+    local writers = {}
+    for _, writer in pairs({
+        setclipboard, toclipboard, writeclipboard,
         syn and syn.write_clipboard,
         Clipboard and Clipboard.set,
-    }
+    }) do
+        if type(writer) == "function" then table.insert(writers, writer) end
+    end
     local copied, lastError = false, nil
     for _, writer in ipairs(writers) do
-        if type(writer) == "function" then
-            local ok, err = pcall(writer, payload)
-            if ok then copied = true break end
-            lastError = err
-        end
+        local ok, err = pcall(writer, payload)
+        if ok then copied = true break end
+        lastError = err
     end
     if not copied then error("Не удалось записать в буфер обмена: " .. tostring(lastError or "clipboard API недоступен"), 0) end
     Notify("Скопировано", label .. " скопировано в буфер", 2.5, true)
@@ -4388,30 +4387,83 @@ FunEffectToggle("🌸 Лепестки сакуры", "Sakura", function()
     return {object = folder, conn = conn}
 end)
 
-FunEffectToggle("💀 Кровь (красные брызги)", "Blood", function()
+local bloodDensity = 4
+FunTab:Slider("Плотность красных частиц", 1, 10, bloodDensity, function(v)
+    bloodDensity = math.floor(v)
+end)
+FunEffectToggle("🔴 Красные частицы (стилизованный эффект)", "Blood", function()
     local folder = New("Folder", {Name="SL_Blood"}, workspace)
-    local hum = GetHum()
-    local lastHP = hum and hum.Health or 100
-    local conn = RunService.Heartbeat:Connect(function()
-        local h, r = GetHum(), GetRoot()
-        if not (h and r) then return end
-        local dmg = lastHP - h.Health
-        lastHP = h.Health
-        local n = dmg > 0 and math.ceil(dmg / 5) or (math.random() > 0.96 and 1 or 0)
-        for _ = 1, n do
-            local part = New("Part", {
-                Size=Vector3.new(0.15,0.15,0.15), Anchored=false,
+    local lastHP = (GetHum() and GetHum().Health) or 100
+    local emitClock, stillClock, puddleRadius = 0, 0, 0
+    local puddle
+    local conn = RunService.Heartbeat:Connect(function(dt)
+        local hum, root = GetHum(), GetRoot()
+        if not (hum and root) then return end
+        local damage = math.max(0, lastHP - hum.Health)
+        lastHP = hum.Health
+        emitClock += dt
+        local interval = 1 / (bloodDensity * 2.2)
+        local damageBurst = damage > 0 and math.min(5, math.ceil(damage / 12)) or 0
+        local count = damageBurst
+        while emitClock >= interval do
+            emitClock -= interval
+            count += 1
+            if count >= bloodDensity then break end
+        end
+        local bodyParts = {}
+        for _, part in ipairs(root.Parent:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                table.insert(bodyParts, part)
+            end
+        end
+        for i = 1, math.min(count, bloodDensity) do
+            local source = #bodyParts > 0 and bodyParts[math.random(1, #bodyParts)] or root
+            local drop = New("Part", {
+                Name="SL_RedParticle", Shape=Enum.PartType.Ball,
+                Size=Vector3.new(0.12, 0.12, 0.12), Anchored=false,
                 CanCollide=false, CanTouch=false, CanQuery=false, CastShadow=false,
-                Material=Enum.Material.Neon, Color=Color3.fromRGB(180+math.random(0,75), 0, 0),
-                Transparency=0.0,
+                Material=Enum.Material.SmoothPlastic,
+                Color=Color3.fromRGB(155 + math.random(0, 45), 12, 22),
+                Transparency=0.12,
             }, folder)
-            part.CFrame = CFrame.new(r.Position + Vector3.new(math.random(-1,1), math.random(0,2), math.random(-1,1)))
-            part.AssemblyLinearVelocity = Vector3.new(math.random(-8,8), math.random(4,12), math.random(-8,8))
-            task.spawn(function()
-                task.wait(0.6)
-                for i=1,8 do if not part.Parent then break end part.Transparency=i/8 task.wait(0.05) end
-                part:Destroy()
+            drop.CFrame = source.CFrame * CFrame.new(math.random(-8,8)/20, math.random(-8,8)/20, math.random(-8,8)/20)
+            drop.AssemblyLinearVelocity = Vector3.new(math.random(-5,5), math.random(1,5), math.random(-5,5))
+            task.delay(1.1, function()
+                if drop.Parent then
+                    Tween(drop, 0.3, {Transparency = 1, Size = Vector3.new(0.03,0.03,0.03)})
+                    task.delay(0.32, function() if drop.Parent then drop:Destroy() end end)
+                end
             end)
+        end
+        local moving = root.AssemblyLinearVelocity.Magnitude > 1.2
+        if moving then
+            stillClock = 0
+            puddleRadius = math.max(0, puddleRadius - dt * 0.25)
+        else
+            stillClock += dt
+            puddleRadius = math.min(2.2, puddleRadius + dt * 0.12)
+        end
+        if stillClock > 1.2 and puddleRadius > 0.08 then
+            local params = RaycastParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances = {root.Parent, folder}
+            local hit = workspace:Raycast(root.Position, Vector3.new(0, -8, 0), params)
+            if hit then
+                if not puddle or not puddle.Parent then
+                    puddle = New("Part", {
+                        Name="SL_RedGroundEffect", Shape=Enum.PartType.Cylinder,
+                        Anchored=true, CanCollide=false, CanTouch=false, CanQuery=false,
+                        Material=Enum.Material.SmoothPlastic,
+                        Color=Color3.fromRGB(105, 8, 18), Transparency=0.28,
+                        Size=Vector3.new(0.035, 0.08, 0.08),
+                    }, folder)
+                end
+                puddle.Size = Vector3.new(0.035, puddleRadius * 2, puddleRadius * 2)
+                puddle.CFrame = CFrame.new(hit.Position + Vector3.new(0, 0.025, 0)) * CFrame.Angles(0, 0, math.rad(90))
+            end
+        elseif puddle and puddle.Parent then
+            puddle:Destroy()
+            puddle = nil
         end
     end)
     return {object=folder, conn=conn}
