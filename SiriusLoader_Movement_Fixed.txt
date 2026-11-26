@@ -43,8 +43,8 @@ local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local HubName = "SiriusLoader"
 local Author = "@ESlor6270"
 
-local frameWidth = isMobile and 440 or 580
-local frameHeight = isMobile and 330 or 410
+local frameWidth = isMobile and 420 or 640
+local frameHeight = isMobile and 330 or 450
 
 -- ==================== КОНФИГ ====================
 local CONFIG_FILE = "SiriusLoader_Config.json"
@@ -67,6 +67,11 @@ pcall(function()
 end)
 
 Config.Binds = type(Config.Binds) == "table" and Config.Binds or {}
+
+-- Shared localization helper for every UI section.
+local function VisualText(ru, en)
+    return Config.Language == "en" and en or ru
+end
 
 local function SaveConfig()
     pcall(function()
@@ -298,13 +303,13 @@ local isLightTheme = false
 
 local THEMES = {
     dark = {
-        Background   = Color3.fromRGB(20, 20, 26),
-        Top          = Color3.fromRGB(28, 28, 37),
-        Sidebar      = Color3.fromRGB(24, 24, 31),
-        Element      = Color3.fromRGB(36, 36, 47),
-        ElementHover = Color3.fromRGB(48, 48, 63),
-        Text         = Color3.fromRGB(235, 235, 240),
-        SubText      = Color3.fromRGB(150, 150, 165),
+        Background   = Color3.fromRGB(13, 17, 27),
+        Top          = Color3.fromRGB(19, 26, 40),
+        Sidebar      = Color3.fromRGB(16, 23, 36),
+        Element      = Color3.fromRGB(27, 37, 54),
+        ElementHover = Color3.fromRGB(38, 52, 74),
+        Text         = Color3.fromRGB(240, 245, 255),
+        SubText      = Color3.fromRGB(153, 169, 190),
     },
     light = {
         Background   = Color3.fromRGB(240, 241, 248),
@@ -424,9 +429,9 @@ local MainFrame = New("Frame", {
     Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, frameWidth, 0, 0),
     BackgroundTransparency = 1, ClipsDescendants = true, Visible = false,
 }, ScreenGui)
-Round(MainFrame, 10)
+Round(MainFrame, 14)
 BindBg(MainFrame, "BackgroundColor3", THEMES.dark.Background, THEMES.light.Background)
-New("UIStroke", {Color = Color3.fromRGB(60, 60, 80), Thickness = 1}, MainFrame)
+New("UIStroke", {Color = Theme.Accent, Transparency = 0.58, Thickness = 1.25}, MainFrame)
 local MainScale = New("UIScale", {Scale = Config.Scale}, MainFrame)
 
 local TopBar = New("Frame", {BackgroundColor3 = Theme.Top, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 38)}, MainFrame)
@@ -591,7 +596,7 @@ local Body = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0
 
 local Sidebar = New("ScrollingFrame", {
     BackgroundColor3 = Theme.Sidebar, BorderSizePixel = 0, Position = UDim2.new(0, 6, 0, 6), -- [BG]
-    Size = UDim2.new(0, 126, 1, -34), ScrollBarThickness = 0,
+    Size = UDim2.new(0, 140, 1, -34), ScrollBarThickness = 0,
     AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(),
 }, Body)
 Round(Sidebar, 8)
@@ -600,19 +605,19 @@ New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.Layout
 New("UIPadding", {PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6)}, Sidebar)
 
 local Content = New("Frame", {
-    BackgroundTransparency = 1, Position = UDim2.new(0, 138, 0, 6), Size = UDim2.new(1, -144, 1, -34),
+    BackgroundTransparency = 1, Position = UDim2.new(0, 152, 0, 6), Size = UDim2.new(1, -158, 1, -34),
 }, Body)
 
 -- Поиск
 local SearchBox = New("TextBox", {
-    BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 26),
+    BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 30),
     Font = Enum.Font.Gotham, PlaceholderText = Lang.search or "⌕  Search...", PlaceholderColor3 = Theme.SubText,
     Text = "", TextColor3 = Theme.Text, TextSize = 11, ClearTextOnFocus = false,
 }, Content)
-Round(SearchBox, 6)
+Round(SearchBox, 8)
 BindBg(SearchBox, "BackgroundColor3", THEMES.dark.Element, THEMES.light.Element)
 
-local Pages = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 32), Size = UDim2.new(1, 0, 1, -32)}, Content)
+local Pages = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 36), Size = UDim2.new(1, 0, 1, -36)}, Content)
 
 -- Нижняя панель (FPS / Ping)
 local Footer = New("TextLabel", {
@@ -908,11 +913,11 @@ end
 local function CreateTab(name, icon)
     local btn = New("TextButton", {
         BackgroundColor3 = Theme.Element, BorderSizePixel = 0, AutoButtonColor = false,
-        Size = UDim2.new(1, -10, 0, 28), Font = Enum.Font.GothamSemibold,
-        Text = (icon and (icon .. "  ") or "") .. name, TextColor3 = Theme.SubText, TextSize = 11,
+        Size = UDim2.new(1, -10, 0, 32), Font = Enum.Font.GothamSemibold,
+        Text = (icon and (icon .. "  ") or "") .. name, TextColor3 = Theme.SubText, TextSize = 12,
         LayoutOrder = #Sidebar:GetChildren(),
     }, Sidebar)
-    Round(btn, 6)
+    Round(btn, 8)
     BindBg(btn, "BackgroundColor3", THEMES.dark.Element, THEMES.light.Element)
     BindBg(btn, "TextColor3", THEMES.dark.SubText, THEMES.light.SubText)
 
@@ -942,8 +947,8 @@ local function CreateTab(name, icon)
 
     function tab:Section(text)
         local l = New("TextLabel", {
-            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Font = Enum.Font.GothamBold,
-            Text = string.upper(text), TextColor3 = Theme.Accent, TextSize = 10,
+            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24), Font = Enum.Font.GothamBold,
+            Text = string.upper(text), TextColor3 = Theme.Accent, TextSize = 11,
             TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = nextOrder(),
         }, page)
         BindAccent(l, "TextColor3")
@@ -3035,10 +3040,6 @@ OnUnload(function()
     if rainSound then rainSound:Destroy() end
 end)
 
-local function VisualText(ru, en)
-    return Config.Language == "en" and en or ru
-end
-
 VisualsTab:Section("ESP (встроенный)")
 local esp = {on = false, objs = {}}
 local function espClear()
@@ -3125,10 +3126,6 @@ end
 -- ==================== VISUALS: 30 НОВЫХ ФУНКЦИЙ ====================
 do
 -- Локализация подписей для этого блока (предыдущая функция находится в отдельной области do...end)
-local function VisualText(ru, en)
-    return Config.Language == "en" and en or ru
-end
-
 -- Все эффекты ниже клиентские. Для Drawing-оверлеев нужен executor с Drawing API.
 local VFX = {
     Tracers = false, Boxes = false, HeadDots = false, Names = false,
