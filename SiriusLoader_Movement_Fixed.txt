@@ -8195,6 +8195,110 @@ do
         and type(baseUrl) == "string" and baseUrl:match("^https://") then
         local mcpRunning = true
         local wasOnline = false
+
+        -- A cloud request can never execute arbitrary Lua without a fresh,
+        -- on-device approval for the exact source shown in the dialog.
+        local function confirmCloudLua(source)
+            local decided = Instance.new("BindableEvent")
+            local choice = false
+            local overlay = New("Frame", {
+                Name = "SiriusMCPApprovalOverlay",
+                BackgroundColor3 = Color3.fromRGB(5, 7, 12),
+                BackgroundTransparency = 0.22,
+                Size = UDim2.new(1, 0, 1, 0),
+                ZIndex = 900,
+            }, ScreenGui)
+            local card = New("Frame", {
+                Name = "ApprovalCard",
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0.88, 0, 0, 330),
+                BackgroundColor3 = Color3.fromRGB(22, 25, 36),
+                BorderSizePixel = 0,
+                ZIndex = 901,
+            }, overlay)
+            Round(card, 14)
+            New("UIStroke", {Color = Color3.fromRGB(235, 82, 82), Thickness = 1.6}, card)
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 16, 0, 12),
+                Size = UDim2.new(1, -32, 0, 30),
+                Font = Enum.Font.GothamBold,
+                Text = "⚠  ЗАПРОС НА ВЫПОЛНЕНИЕ LUA",
+                TextColor3 = Color3.fromRGB(255, 105, 105),
+                TextSize = 17,
+                TextWrapped = true,
+                ZIndex = 902,
+            }, card)
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 16, 0, 46),
+                Size = UDim2.new(1, -32, 0, 48),
+                Font = Enum.Font.Gotham,
+                Text = "Облачный запрос просит выполнить код в executor. Проверь весь текст ниже. Неизвестный код может менять игру, обращаться к данным или вызывать внешние функции.",
+                TextColor3 = Color3.fromRGB(220, 220, 230),
+                TextSize = 12,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 902,
+            }, card)
+            local preview = New("TextBox", {
+                Position = UDim2.new(0, 16, 0, 101),
+                Size = UDim2.new(1, -32, 0, 155),
+                BackgroundColor3 = Color3.fromRGB(12, 15, 23),
+                TextColor3 = Color3.fromRGB(220, 230, 245),
+                PlaceholderText = "Код пуст",
+                Text = tostring(source or ""),
+                Font = Enum.Font.Code,
+                TextSize = 11,
+                TextWrapped = false,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                ClearTextOnFocus = false,
+                TextEditable = false,
+                MultiLine = true,
+                ScrollBarThickness = 6,
+                ZIndex = 902,
+            }, card)
+            local function finish(value)
+                choice = value
+                if decided then decided:Fire() end
+            end
+            local deny = New("TextButton", {
+                Position = UDim2.new(0, 16, 1, -58),
+                Size = UDim2.new(0.48, -8, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(65, 42, 48),
+                Text = "ОТКЛОНИТЬ",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 12,
+                ZIndex = 902,
+            }, card)
+            Round(deny, 8)
+            deny.MouseButton1Click:Connect(function() finish(false) end)
+            local allow = New("TextButton", {
+                Position = UDim2.new(0.52, 0, 1, -58),
+                Size = UDim2.new(0.48, -16, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(54, 105, 78),
+                Text = "ВЫПОЛНИТЬ ЭТОТ КОД",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 11,
+                ZIndex = 902,
+            }, card)
+            Round(allow, 8)
+            allow.MouseButton1Click:Connect(function() finish(true) end)
+
+            local timeout = false
+            task.delay(30, function()
+                if overlay.Parent then timeout = true finish(false) end
+            end)
+            decided.Event:Wait()
+            pcall(function() overlay:Destroy() end)
+            pcall(function() decided:Destroy() end)
+            return choice and not timeout
+        end
+
         local function mcpRequest(path, method, body)
             local response = req({
                 Url = baseUrl .. path,
@@ -8211,6 +8315,17 @@ do
             local raw = response.Body or response.body or "{}"
             return HttpService:JSONDecode(raw)
         end
+
+        UtilTab:Section("Sirius MCP · Облако")
+        UtilTab:Button("Проверить соединение с Render", function()
+            local ok, response = pcall(mcpRequest, "/health", "GET")
+            if ok and response and response.ok == true then
+                Notify("Sirius MCP", "Render отвечает. Облачный мост доступен.", 4, true)
+            else
+                Notify("Sirius MCP · Ошибка", tostring(response):sub(1, 140), 5, true)
+            end
+        end, true)
+        UtilTab:Label("Удалённое выполнение Lua всегда требует отдельного подтверждения на этом устройстве.")
 
         task.spawn(function()
             while mcpRunning and ScreenGui.Parent do
@@ -8263,6 +8378,8 @@ do
                             return {started = true, id = command.id}
                         elseif command.type == "execute_lua" then
                             if command.confirm_risk ~= true then error("Execution requires explicit approval") end
+                            local source = tostring(command.code or "")
+                            if not confirmCloudLua(source) then error("Execution declined or approval timed out on device") end
                             if type(loadstring) ~= "function" then error("loadstring unavailable") end
                             local fn, compileError = loadstring(tostring(command.code or ""))
                             if not fn then error("Lua compile error: " .. tostring(compileError)) end
