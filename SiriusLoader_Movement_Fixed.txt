@@ -3124,6 +3124,11 @@ VisualsTab:Slider("Зазор в центре", 0, 20, 4, function(v) xh.gap = v
 end
 -- ==================== VISUALS: 30 НОВЫХ ФУНКЦИЙ ====================
 do
+-- Локализация подписей для этого блока (предыдущая функция находится в отдельной области do...end)
+local function VisualText(ru, en)
+    return Config.Language == "en" and en or ru
+end
+
 -- Все эффекты ниже клиентские. Для Drawing-оверлеев нужен executor с Drawing API.
 local VFX = {
     Tracers = false, Boxes = false, HeadDots = false, Names = false,
