@@ -8659,8 +8659,44 @@ do
                         Notify("Sirius MCP", "Согласие действует только до закрытия executor: writefile недоступен.", 6, true)
                     end
                     if startMCP then startMCP() end
+                    if not _G.SiriusInstallerLinkButton then
+                        _G.SiriusInstallerLinkButton = true
+                        UtilTab:Button("Скопировать ссылку на установщик MCP сервера", function()
+                            local installerUrl = "https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstaller.exe"
+                            local copied = false
+                            if type(setclipboard) == "function" then
+                                copied = pcall(setclipboard, installerUrl)
+                            elseif type(toclipboard) == "function" then
+                                copied = pcall(toclipboard, installerUrl)
+                            end
+                            if copied then
+                                Notify("Sirius MCP", "Ссылка на установщик скопирована.", 4, true)
+                            else
+                                Notify("Sirius MCP", "Буфер обмена недоступен. Ссылка: " .. installerUrl, 7, true)
+                                warn("[Sirius MCP] Installer URL: " .. installerUrl)
+                            end
+                        end, true)
+                    end
                 end)
             end)
+        end
+
+        if riskAccepted and not _G.SiriusInstallerLinkButton then
+            _G.SiriusInstallerLinkButton = true
+            UtilTab:Button("Скопировать ссылку на установщик MCP сервера", function()
+                local installerUrl = "https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstaller.exe"
+                local copied = false
+                if type(setclipboard) == "function" then
+                    copied = pcall(setclipboard, installerUrl)
+                elseif type(toclipboard) == "function" then
+                    copied = pcall(toclipboard, installerUrl)
+                end
+                if copied then
+                    Notify("Sirius MCP", "Ссылка на установщик скопирована.", 4, true)
+                else
+                    Notify("Sirius MCP", "Буфер обмена недоступен. Ссылка: " .. installerUrl, 7, true)
+                end
+            end, true)
         end
 
         -- Keep the start/stop control directly under the cloud section header.
