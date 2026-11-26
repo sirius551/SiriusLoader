@@ -8352,6 +8352,47 @@ do
                 Notify("Sirius MCP · Ошибка", tostring(response):sub(1, 140), 5, true)
             end
         end, true)
+        UtilTab:Section("Подключение к MCP-клиентам")
+        UtilTab:Button("Скопировать конфиг для Visual Studio Code", function()
+            local config = {
+                inputs = {{
+                    type = "promptString",
+                    id = "sirius-device-token",
+                    description = "Sirius Loader device token (из Sirius_MCP_Token.txt)",
+                    password = true,
+                }},
+                servers = {
+                    ["sirius-loader"] = {
+                        type = "http",
+                        url = "https://sirius-mcp.onrender.com/mcp",
+                        headers = { ["X-Sirius-Token"] = "${input:sirius-device-token}" },
+                    },
+                },
+            }
+            local encoded = HttpService:JSONEncode(config)
+            local clipboard = setclipboard or toclipboard
+            if type(clipboard) == "function" then
+                local copied = pcall(clipboard, encoded)
+                if copied then
+                    Notify("Sirius MCP", "Конфиг скопирован. Вставь его в .vscode/mcp.json и запусти сервер.", 6, true)
+                else
+                    Notify("Sirius MCP", "Буфер обмена недоступен. Инструкция есть в MCP/README.md.", 6, true)
+                end
+            else
+                Notify("Sirius MCP", "Нет API буфера обмена. Открой MCP/README.md и настрой вручную.", 6, true)
+            end
+        end, true)
+        UtilTab:Button("Скопировать MCP URL", function()
+            local clipboard = setclipboard or toclipboard
+            if type(clipboard) == "function" and pcall(clipboard, "https://sirius-mcp.onrender.com/mcp") then
+                Notify("Sirius MCP", "URL скопирован. Транспорт: Streamable HTTP.", 4, true)
+            else
+                Notify("Sirius MCP", "URL: https://sirius-mcp.onrender.com/mcp", 6, true)
+            end
+        end, true)
+        UtilTab:Label("VS Code: создай .vscode/mcp.json в папке проекта, вставь конфиг и нажми Start. Токен VS Code запросит отдельно.")
+        UtilTab:Label("Другие клиенты: укажи этот URL, транспорт Streamable HTTP и заголовок X-Sirius-Token. Значение бери из Sirius_MCP_Token.txt. Не публикуй токен.")
+        UtilTab:Label("Если копирование недоступно, полная инструкция и пример конфигурации находятся в MCP/README.md.")
         UtilTab:Label("Удалённое выполнение Lua всегда требует отдельного подтверждения на этом устройстве.")
 
         task.spawn(function()
