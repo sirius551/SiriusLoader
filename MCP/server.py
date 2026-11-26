@@ -162,7 +162,8 @@ async def health(_: Request) -> Response:
 
 @mcp.custom_route("/register", methods=["POST"])
 async def register(request: Request) -> Response:
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    client_ip = forwarded_ip or (request.client.host if request.client else "unknown")
     now = time.time()
     with REGISTER_LOCK:
         attempts = REGISTER_ATTEMPTS.setdefault(client_ip, deque())
