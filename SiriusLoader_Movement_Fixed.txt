@@ -43,8 +43,8 @@ local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local HubName = "SiriusLoader"
 local Author = "@ESlor6270"
 
-local frameWidth = isMobile and 420 or 640
-local frameHeight = isMobile and 330 or 450
+local frameWidth = isMobile and 420 or 760
+local frameHeight = isMobile and 360 or 520
 
 -- ==================== КОНФИГ ====================
 local CONFIG_FILE = "SiriusLoader_Config.json"
@@ -57,6 +57,12 @@ local Config = {
     Binds = {},
     Language = nil,
     LightTheme = false,
+    WallpaperId = "",
+    WallpaperSpriteId = "",
+    WallpaperFrames = 16,
+    WallpaperColumns = 4,
+    WallpaperFPS = 12,
+    WallpaperTransparency = 0.15,
 }
 
 pcall(function()
@@ -434,16 +440,68 @@ BindBg(MainFrame, "BackgroundColor3", THEMES.dark.Background, THEMES.light.Backg
 New("UIStroke", {Color = Theme.Accent, Transparency = 0.58, Thickness = 1.25}, MainFrame)
 local MainScale = New("UIScale", {Scale = Config.Scale}, MainFrame)
 
-local TopBar = New("Frame", {BackgroundColor3 = Theme.Top, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 38)}, MainFrame)
+-- Wallpaper layer. Animated wallpapers use a Roblox sprite-sheet image asset.
+local WallpaperImage = New("ImageLabel", {
+    Name = "Wallpaper", BackgroundTransparency = 1, BorderSizePixel = 0,
+    Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(1, 0, 1, 0),
+    ScaleType = Enum.ScaleType.Crop, Image = "", ImageTransparency = Config.WallpaperTransparency or 0.15, ZIndex = 1,
+}, MainFrame)
+local WallpaperTint = New("Frame", {
+    Name = "WallpaperTint", BackgroundColor3 = Theme.Background, BackgroundTransparency = 0.42,
+    BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ZIndex = 2,
+}, MainFrame)
+Round(WallpaperTint, 18)
+
+local function NormalizeAssetId(value)
+    value = tostring(value or ""):match("^%s*(.-)%s*$")
+    if value == "" then return "" end
+    local digits = value:match("(%d+)")
+    return digits and ("rbxassetid://" .. digits) or ""
+end
+
+local wallpaperFrameIndex, wallpaperClock = 0, 0
+local function ApplyWallpaper()
+    local spriteId = NormalizeAssetId(Config.WallpaperSpriteId)
+    local staticId = NormalizeAssetId(Config.WallpaperId)
+    WallpaperImage.Image = spriteId ~= "" and spriteId or staticId
+    WallpaperImage.ImageTransparency = math.clamp(tonumber(Config.WallpaperTransparency) or 0.15, 0, 0.9)
+    wallpaperFrameIndex, wallpaperClock = 0, 0
+    if spriteId ~= "" then
+        local cols = math.clamp(math.floor(tonumber(Config.WallpaperColumns) or 4), 1, 16)
+        local frames = math.clamp(math.floor(tonumber(Config.WallpaperFrames) or 16), 1, 256)
+        local side = 1024 / cols
+        WallpaperImage.ImageRectSize = Vector2.new(side, side)
+        WallpaperImage.ImageRectOffset = Vector2.zero
+        Config.WallpaperColumns, Config.WallpaperFrames = cols, frames
+    else
+        WallpaperImage.ImageRectSize = Vector2.zero
+        WallpaperImage.ImageRectOffset = Vector2.zero
+    end
+end
+ApplyWallpaper()
+Add(RunService.Heartbeat:Connect(function(dt)
+    if not WallpaperImage.Parent or NormalizeAssetId(Config.WallpaperSpriteId) == "" then return end
+    local fps = math.clamp(tonumber(Config.WallpaperFPS) or 12, 1, 30)
+    wallpaperClock += dt
+    if wallpaperClock >= 1 / fps then
+        wallpaperClock %= 1 / fps
+        local frames = math.clamp(math.floor(tonumber(Config.WallpaperFrames) or 16), 1, 256)
+        local cols = math.clamp(math.floor(tonumber(Config.WallpaperColumns) or 4), 1, 16)
+        wallpaperFrameIndex = (wallpaperFrameIndex + 1) % frames
+        WallpaperImage.ImageRectOffset = Vector2.new((wallpaperFrameIndex % cols) * (1024 / cols), math.floor(wallpaperFrameIndex / cols) * (1024 / cols))
+    end
+end))
+
+local TopBar = New("Frame", {BackgroundColor3 = Theme.Top, BackgroundTransparency = 0.12, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 48), ZIndex = 3}, MainFrame)
 BindBg(TopBar, "BackgroundColor3", THEMES.dark.Top, THEMES.light.Top)
-local AccentLine = New("Frame", {Position = UDim2.new(0, 0, 1, -2), Size = UDim2.new(1, 0, 0, 2), BorderSizePixel = 0}, TopBar)
+local AccentLine = New("Frame", {Position = UDim2.new(0, 0, 1, -2), Size = UDim2.new(1, 0, 0, 2), BorderSizePixel = 0, ZIndex = 4}, TopBar)
 BindAccent(AccentLine, "BackgroundColor3")
 New("UIGradient", {Transparency = NumberSequence.new({
     NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.8),
 })}, AccentLine)
 
 local TitleLabel = New("TextButton", {
-    BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 0), Size = UDim2.new(1, -130, 1, 0),
+    BackgroundTransparency = 1, Position = UDim2.new(0, 18, 0, 0), Size = UDim2.new(1, -150, 1, 0),
     Font = Enum.Font.GothamBold, Text = "SiriusLoader  |  " .. Author, TextColor3 = Theme.Text,
     TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false,
 }, TopBar)
@@ -451,10 +509,10 @@ local TitleLabel = New("TextButton", {
 local function TopButton(text, xOff, color)
     local b = New("TextButton", {
         BackgroundColor3 = color or Theme.Element, BorderSizePixel = 0, AutoButtonColor = false,
-        Position = UDim2.new(1, xOff, 0, 7), Size = UDim2.new(0, 26, 0, 24),
+        Position = UDim2.new(1, xOff, 0, 10), Size = UDim2.new(0, 28, 0, 28),
         Font = Enum.Font.GothamBold, Text = text, TextColor3 = Theme.Text, TextSize = 13,
     }, TopBar)
-    Round(b, 6)
+    Round(b, 11)
     b.MouseEnter:Connect(function() Tween(b, 0.15, {BackgroundTransparency = 0.3}) end)
     b.MouseLeave:Connect(function() Tween(b, 0.15, {BackgroundTransparency = 0}) end)
     return b
@@ -592,36 +650,39 @@ Add(RunService.Heartbeat:Connect(function()
 end))
 
 -- Тело окна
-local Body = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 38), Size = UDim2.new(1, 0, 0, frameHeight - 38)}, MainFrame)
+local Body = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 48), Size = UDim2.new(1, 0, 1, -48), ZIndex = 3}, MainFrame)
 
 local Sidebar = New("ScrollingFrame", {
-    BackgroundColor3 = Theme.Sidebar, BorderSizePixel = 0, Position = UDim2.new(0, 6, 0, 6), -- [BG]
-    Size = UDim2.new(0, 140, 1, -34), ScrollBarThickness = 0,
+    BackgroundColor3 = Theme.Sidebar, BackgroundTransparency = 0.12, BorderSizePixel = 0, Position = UDim2.new(0, 10, 0, 10), -- [BG]
+    Size = UDim2.new(0, 154, 1, -48), ScrollBarThickness = 0,
     AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(),
 }, Body)
-Round(Sidebar, 8)
+Round(Sidebar, 14)
 BindBg(Sidebar, "BackgroundColor3", THEMES.dark.Sidebar, THEMES.light.Sidebar)
-New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center}, Sidebar)
+local SidebarBrand = New("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, -12, 0, 48), LayoutOrder = 0}, Sidebar)
+New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 5), Size = UDim2.new(1, -16, 0, 20), Font = Enum.Font.GothamBlack, Text = "SIRIUS", TextColor3 = Theme.Text, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left}, SidebarBrand)
+New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 9, 0, 25), Size = UDim2.new(1, -16, 0, 14), Font = Enum.Font.Gotham, Text = "LOADER  •  V3", TextColor3 = Theme.SubText, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left}, SidebarBrand)
+New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center}, Sidebar)
 New("UIPadding", {PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6)}, Sidebar)
 
 local Content = New("Frame", {
-    BackgroundTransparency = 1, Position = UDim2.new(0, 152, 0, 6), Size = UDim2.new(1, -158, 1, -34),
+    BackgroundTransparency = 1, Position = UDim2.new(0, 174, 0, 10), Size = UDim2.new(1, -184, 1, -48),
 }, Body)
 
 -- Поиск
 local SearchBox = New("TextBox", {
-    BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 30),
+    BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 34),
     Font = Enum.Font.Gotham, PlaceholderText = Lang.search or "⌕  Search...", PlaceholderColor3 = Theme.SubText,
     Text = "", TextColor3 = Theme.Text, TextSize = 11, ClearTextOnFocus = false,
 }, Content)
-Round(SearchBox, 8)
+Round(SearchBox, 11)
 BindBg(SearchBox, "BackgroundColor3", THEMES.dark.Element, THEMES.light.Element)
 
-local Pages = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 36), Size = UDim2.new(1, 0, 1, -36)}, Content)
+local Pages = New("Frame", {BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 42), Size = UDim2.new(1, 0, 1, -42)}, Content)
 
 -- Нижняя панель (FPS / Ping)
 local Footer = New("TextLabel", {
-    BackgroundTransparency = 1, Position = UDim2.new(0, 10, 1, -24), Size = UDim2.new(1, -20, 0, 20),
+    BackgroundTransparency = 1, Position = UDim2.new(0, 10, 1, -26), Size = UDim2.new(1, -20, 0, 20),
     Font = Enum.Font.Gotham, Text = "FPS: -- | Ping: -- | Игроков: --", TextColor3 = Theme.SubText,
     TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left,
 }, Body)
@@ -913,11 +974,11 @@ end
 local function CreateTab(name, icon)
     local btn = New("TextButton", {
         BackgroundColor3 = Theme.Element, BorderSizePixel = 0, AutoButtonColor = false,
-        Size = UDim2.new(1, -10, 0, 32), Font = Enum.Font.GothamSemibold,
+        Size = UDim2.new(1, -12, 0, 36), Font = Enum.Font.GothamSemibold,
         Text = (icon and (icon .. "  ") or "") .. name, TextColor3 = Theme.SubText, TextSize = 12,
         LayoutOrder = #Sidebar:GetChildren(),
     }, Sidebar)
-    Round(btn, 8)
+    Round(btn, 10)
     BindBg(btn, "BackgroundColor3", THEMES.dark.Element, THEMES.light.Element)
     BindBg(btn, "TextColor3", THEMES.dark.SubText, THEMES.light.SubText)
 
@@ -947,7 +1008,7 @@ local function CreateTab(name, icon)
 
     function tab:Section(text)
         local l = New("TextLabel", {
-            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24), Font = Enum.Font.GothamBold,
+            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30), Font = Enum.Font.GothamBlack,
             Text = string.upper(text), TextColor3 = Theme.Accent, TextSize = 11,
             TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = nextOrder(),
         }, page)
@@ -968,8 +1029,8 @@ local function CreateTab(name, icon)
 
     function tab:Button(text, callback, nobind)
         local b = New("TextButton", {
-            BackgroundColor3 = Theme.Element, BorderSizePixel = 0, AutoButtonColor = false,
-            Size = UDim2.new(1, 0, 0, 34), Font = Enum.Font.GothamSemibold, Text = text,
+            BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, AutoButtonColor = false,
+            Size = UDim2.new(1, 0, 0, 40), Font = Enum.Font.GothamSemibold, Text = text,
             TextColor3 = Theme.Text, TextSize = 12, LayoutOrder = nextOrder(),
         }, page)
         Round(b, 6)
@@ -1044,8 +1105,8 @@ local function CreateTab(name, icon)
     function tab:Toggle(text, default, callback)
         local state = default and true or false
         local f = New("TextButton", {
-            BackgroundColor3 = Theme.Element, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
-            Size = UDim2.new(1, 0, 0, 34), LayoutOrder = nextOrder(),
+            BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+            Size = UDim2.new(1, 0, 0, 40), LayoutOrder = nextOrder(),
         }, page)
         Round(f, 6)
         New("TextLabel", {
@@ -1106,7 +1167,7 @@ local function CreateTab(name, icon)
     function tab:Slider(text, min, max, default, callback, decimals)
         decimals = decimals or 0
         local value = math.clamp(default, min, max)
-        local f = New("Frame", {BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 46), LayoutOrder = nextOrder()}, page)
+        local f = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 54), LayoutOrder = nextOrder()}, page)
         Round(f, 6)
         New("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 4), Size = UDim2.new(1, -90, 0, 18),
@@ -1119,7 +1180,7 @@ local function CreateTab(name, icon)
         }, f)
         local track = New("Frame", {
             BackgroundColor3 = Color3.fromRGB(55, 55, 70), BorderSizePixel = 0,
-            Position = UDim2.new(0, 12, 0, 31), Size = UDim2.new(1, -24, 0, 6),
+            Position = UDim2.new(0, 12, 0, 37), Size = UDim2.new(1, -24, 0, 7),
         }, f)
         Round(track, 3)
         local fill = New("Frame", {BorderSizePixel = 0, Size = UDim2.new(0, 0, 1, 0)}, track)
@@ -7422,7 +7483,7 @@ local sB = SettingsTab:Slider("Синий (B)", 0, 255, rgb[3], function(v) rgb[
 sR.OnRelease, sG.OnRelease, sB.OnRelease = SaveConfig, SaveConfig, SaveConfig
 
 SettingsTab:Section("Внешний вид окна")
-local sT = SettingsTab:Slider("Прозрачность окна", 0, 0.6, Config.Transparency, function(v)
+local sT = SettingsTab:Slider("Прозрачность фона", 0, 0.85, Config.Transparency, function(v)
     Config.Transparency = v
     MainFrame.BackgroundTransparency = v
 end, 2)
@@ -7434,6 +7495,41 @@ end, 2)
 sS.OnRelease = SaveConfig
 SettingsTab:Toggle("Показывать плавающую кнопку ☰", true, function(v) FloatBtn.Visible = v end)
 SettingsTab:Toggle("Уведомления", Config.Notifications, function(v) Config.Notifications = v SaveConfig() end)
+
+SettingsTab:Section("Обои и фон")
+local wallpaperBox = SettingsTab:Input("ID обоев", "Например: 1234567890", function(value)
+    Config.WallpaperId = value
+    Config.WallpaperSpriteId = ""
+end)
+local spriteBox = SettingsTab:Input("ID аним. спрайт-листа", "Спрайт-лист 1024×1024", function(value)
+    Config.WallpaperSpriteId = value
+    if value ~= "" then Config.WallpaperId = "" end
+end)
+SettingsTab:Label("Анимация: спрайт-лист 1024×1024 с одинаковыми кадрами.")
+local sWp = SettingsTab:Slider("Прозрачность обоев", 0, 0.9, Config.WallpaperTransparency or 0.15, function(v)
+    Config.WallpaperTransparency = v
+    WallpaperImage.ImageTransparency = v
+end, 2)
+sWp.OnRelease = SaveConfig
+local sFps = SettingsTab:Slider("Частота кадров обоев", 1, 30, Config.WallpaperFPS or 12, function(v)
+    Config.WallpaperFPS = math.floor(v)
+end)
+sFps.OnRelease = SaveConfig
+SettingsTab:Button("Применить обои", function()
+    Config.WallpaperId = wallpaperBox.Text
+    Config.WallpaperSpriteId = spriteBox.Text
+    if Config.WallpaperSpriteId ~= "" then Config.WallpaperId = "" end
+    ApplyWallpaper()
+    SaveConfig()
+    Notify("Обои", WallpaperImage.Image ~= "" and "Фон применён" or "Фон очищен", 2)
+end, true)
+SettingsTab:Button("Убрать обои", function()
+    Config.WallpaperId, Config.WallpaperSpriteId = "", ""
+    wallpaperBox.Text, spriteBox.Text = "", ""
+    ApplyWallpaper()
+    SaveConfig()
+    Notify("Обои", "Стандартный фон восстановлен", 2)
+end, true)
 
 SettingsTab:Section("Управление")
 local keyBtn
@@ -7454,7 +7550,11 @@ keyBtn = SettingsTab:Button("Клавиша меню: " .. Config.ToggleKey .. "
 end, true)
 SettingsTab:Button("Сбросить настройки", function()
     Config.Transparency, Config.Scale, Config.Notifications, Config.ToggleKey = 0, 1, true, "RightShift"
+    Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperTransparency = "", "", 0.15
+    Config.WallpaperFPS, Config.WallpaperFrames, Config.WallpaperColumns = 12, 16, 4
     MainFrame.BackgroundTransparency, MainScale.Scale = 0, 1
+    WallpaperImage.Image = ""
+    WallpaperImage.ImageTransparency = Config.WallpaperTransparency
     sT:Set(0) sS:Set(1)
     ApplyAccent(presets[1][2], true)
     sR:Set(114) sG:Set(137) sB:Set(218)
@@ -7669,6 +7769,8 @@ end))
 SelectTab("Fling")
 
 MainFrame.Visible = true
+MainFrame.BackgroundTransparency = Config.Transparency
+ApplyWallpaper()
 Tween(MainFrame, 0.45, {Size = UDim2.new(0, frameWidth, 0, frameHeight), BackgroundTransparency = Config.Transparency}, Enum.EasingStyle.Back)
 Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey .. " или кнопка ☰", 3)
 print("[SiriusLoader]: v3 успешно загружен!")
