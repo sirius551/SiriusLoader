@@ -942,7 +942,11 @@ local function RefreshPinnedPanel()
             RefreshPinnedPanel()
         end)
         local unpin = New("TextButton", {BackgroundTransparency = 1, Position = UDim2.new(1, -26, 0, 0), Size = UDim2.new(0, 22, 1, 0), Text = "×", TextColor3 = Theme.SubText, Font = Enum.Font.GothamBold, TextSize = 14, ZIndex = 83}, row)
-        unpin.MouseButton1Click:Connect(function() PinnedWidgets[id] = nil RefreshPinnedPanel() end)
+        unpin.MouseButton1Click:Connect(function()
+            if entry.PinButton and entry.PinButton.Parent then entry.PinButton.Text = "☆" end
+            PinnedWidgets[id] = nil
+            RefreshPinnedPanel()
+        end)
     end
     PinnedPanel.Visible = next(PinnedWidgets) ~= nil
 end
@@ -995,7 +999,7 @@ local function AttachBind(parent, id, action, pos, toggleObject, displayName)
                 pin.Text = "☆"
             else
                 EnsurePinnedPanel()
-                PinnedWidgets[id] = {Object = toggleObject, Name = displayName or id}
+                PinnedWidgets[id] = {Object = toggleObject, Name = displayName or id, PinButton = pin}
                 pin.Text = "★"
             end
             RefreshPinnedPanel()
@@ -7704,7 +7708,8 @@ local wallpaperBox = SettingsTab:Input("ID обоев", "Например: 12345
 end)
 local spriteBox = SettingsTab:Input("ID аним. спрайт-листа", "Спрайт-лист 1024×1024", function(value)
     Config.WallpaperSpriteId = value
-    if value ~= "" then Config.WallpaperId, Config.WallpaperFilePath = "", "" wallpaperFileBox.Text = "" end
+    if value ~= "" then Config.WallpaperId, Config.WallpaperFilePath = "", ""
+        wallpaperFileBox.Text = "" end
 end)
 SettingsTab:Label("Анимация: спрайт-лист 1024×1024 с одинаковыми кадрами.")
 local sWp = SettingsTab:Slider("Прозрачность обоев", 0, 0.9, Config.WallpaperTransparency or 0.15, function(v)
