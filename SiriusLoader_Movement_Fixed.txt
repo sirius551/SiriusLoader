@@ -1398,57 +1398,82 @@ local ConfigTab   = CreateTab("Configs", "💾")
 
 -- ==================== HOME DASHBOARD ====================
 do
-    HomeTab:Section("QUANTUM-STYLE DASHBOARD")
-    local welcome = HomeTab:Label("Добро пожаловать в SiriusLoader")
-    welcome.TextSize = 18
-    welcome.Font = Enum.Font.GothamBlack
-    welcome.TextColor3 = Theme.Text
-    welcome.Size = UDim2.new(1, 0, 0, 34)
+    local function makeCard(height, order, accent)
+        HomeTab.Order += 1
+        local card = New("Frame", {
+            BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.04,
+            BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, height),
+            LayoutOrder = HomeTab.Order, ClipsDescendants = true,
+        }, HomeTab.Page)
+        Round(card, 13)
+        New("UIStroke", {Color = accent or Theme.Accent, Transparency = 0.82, Thickness = 1}, card)
+        return card
+    end
+    local function cardText(parent, text, pos, size, fontSize, color, bold)
+        return New("TextLabel", {
+            BackgroundTransparency = 1, Position = pos, Size = size,
+            Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
+            Text = text, TextColor3 = color or Theme.Text, TextSize = fontSize,
+            TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
+            TextWrapped = true,
+        }, parent)
+    end
 
-    local subtitle = HomeTab:Label("Панель управления • быстрый доступ к функциям и состоянию клиента")
-    subtitle.TextSize = 11
+    local hero = makeCard(92, 1)
+    New("UIGradient", {Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Theme.Top),
+        ColorSequenceKeypoint.new(1, Theme.Element),
+    }), Rotation = 0}, hero)
+    cardText(hero, "SIRIUSLOADER  /  CONTROL CENTER", UDim2.new(0, 18, 0, 12), UDim2.new(1, -36, 0, 18), 10, Theme.Accent, true)
+    cardText(hero, "Добро пожаловать!", UDim2.new(0, 18, 0, 32), UDim2.new(1, -36, 0, 30), 21, Theme.Text, true)
+    cardText(hero, "Управляй функциями, следи за состоянием клиента и настраивай интерфейс.", UDim2.new(0, 19, 0, 64), UDim2.new(1, -38, 0, 18), 10, Theme.SubText, false)
 
-    HomeTab:Section("СОСТОЯНИЕ СЕССИИ")
-    local sessionLabel = HomeTab:Label("Загрузка статистики...")
-    sessionLabel.TextColor3 = Theme.Accent
-    sessionLabel.TextSize = 12
+    local statsCard = makeCard(78, 2)
+    cardText(statsCard, "СИСТЕМА  /  ОБЗОР", UDim2.new(0, 15, 0, 7), UDim2.new(1, -30, 0, 16), 10, Theme.Accent, true)
+    local sessionLabel = cardText(statsCard, "FPS  --      PING  --      ИГРОКИ  --/--", UDim2.new(0, 15, 0, 28), UDim2.new(1, -30, 0, 35), 15, Theme.Text, true)
 
-    HomeTab:Section("БЫСТРЫЙ ДОСТУП")
-    HomeTab:Button("🎯  Открыть Combat", function() SelectTab("Combat") end, true)
-    HomeTab:Button("👁  Открыть Visuals", function() SelectTab("Visuals") end, true)
-    HomeTab:Button("🏃  Открыть Movement", function() SelectTab("Movement") end, true)
-    HomeTab:Button("⚙  Настройки интерфейса", function() SelectTab("Settings") end, true)
-
-    HomeTab:Section("АКТИВНЫЕ ФУНКЦИИ")
+    local activeCard = makeCard(174, 3)
+    cardText(activeCard, "АКТИВНЫЕ ФУНКЦИИ", UDim2.new(0, 15, 0, 8), UDim2.new(0.7, 0, 0, 18), 11, Theme.Text, true)
+    local activeCount = cardText(activeCard, "0 ВКЛ", UDim2.new(0.72, 0, 0, 8), UDim2.new(0.25, -12, 0, 18), 10, Theme.Accent, true)
     local activeRows = {}
-    for i = 1, 8 do
-        local row = HomeTab:Label("•  Нет активных функций")
-        row.TextSize = 11
-        row.TextColor3 = Theme.SubText
+    for i = 1, 7 do
+        local row = cardText(activeCard, "", UDim2.new(0, 16, 0, 32 + (i - 1) * 19), UDim2.new(1, -32, 0, 18), 10, Theme.SubText, false)
         table.insert(activeRows, row)
     end
 
+    HomeTab:Section("БЫСТРЫЙ ДОСТУП")
+    HomeTab:Button("🎯  Combat", function() SelectTab("Combat") end, true)
+    HomeTab:Button("👁  Visuals", function() SelectTab("Visuals") end, true)
+    HomeTab:Button("🏃  Movement", function() SelectTab("Movement") end, true)
+    HomeTab:Button("⚙  Настройки", function() SelectTab("Settings") end, true)
+
     local dashClock = 0
+    local fpsFrames, fpsElapsed, currentFPS = 0, 0, 0
     Add(RunService.Heartbeat:Connect(function(dt)
+        fpsFrames += 1
+        fpsElapsed += dt
+        if fpsElapsed >= 0.75 then
+            currentFPS = math.floor(fpsFrames / fpsElapsed)
+            fpsFrames, fpsElapsed = 0, 0
+        end
         dashClock += dt
         if dashClock < 0.75 then return end
         dashClock = 0
         local ping = "--"
         pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) .. " ms" end)
-        sessionLabel.Text = string.format("FPS  %d     •     PING  %s     •     ИГРОКОВ  %d/%d",
-            math.floor(1 / math.max(dt, 0.001)), ping, #Players:GetPlayers(), Players.MaxPlayers)
+        sessionLabel.Text = string.format("FPS  %d       PING  %s       PLAYERS  %d/%d",
+            currentFPS, ping, #Players:GetPlayers(), Players.MaxPlayers)
 
         local enabled = {}
         for key, widget in pairs(WidgetRegistry) do
             local ok, state = pcall(function() return widget:Get() end)
-            if ok and state == true then
-                table.insert(enabled, key)
-            end
+            if ok and state == true then table.insert(enabled, key) end
         end
         table.sort(enabled)
+        activeCount.Text = tostring(#enabled) .. " ВКЛ"
         for i, row in ipairs(activeRows) do
             local key = enabled[i]
-            row.Text = key and ("●  " .. key) or (i == 1 and (#enabled == 0 and "•  Нет активных функций" or "•  Больше нет активных функций") or "")
+            row.Text = key and ("●  " .. key) or (i == 1 and (#enabled == 0 and "Пока ничего не включено" or "Других активных функций нет") or "")
             row.Visible = key ~= nil or i == 1
             row.TextColor3 = key and Theme.Accent or Theme.SubText
         end
