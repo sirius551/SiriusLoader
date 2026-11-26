@@ -8181,7 +8181,7 @@ end))
 -- Render cloud bridge. Requires executor HTTP request API + readfile.
 do
     local req = (syn and syn.request) or (http and http.request) or http_request or request
-    local token, baseUrl
+    local token, baseUrl = nil, "https://sirius-mcp.onrender.com"
     pcall(function()
         if readfile and isfile and isfile("Sirius_MCP_Token.txt") then
             token = (readfile("Sirius_MCP_Token.txt") or ""):gsub("%s+", "")
@@ -8435,7 +8435,7 @@ do
         table.insert(Cleanups, function() mcpRunning = false end)
         Notify("Sirius MCP", "Облачный мост активен", 3)
     else
-        warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile и Sirius_MCP_URL.txt. При первом запуске устройство регистрируется автоматически.")
+        warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile. При первом запуске устройство регистрируется автоматически.")
     end
 end
 end
