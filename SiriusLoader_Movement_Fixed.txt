@@ -402,8 +402,8 @@ New("UIListLayout", {
 
 local function Notify(title, text, dur, force)
     if not Config.Notifications and not force then return end
-    dur = dur or 3
-    local holder = New("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 66), ClipsDescendants = true}, NotifyHolder)
+    dur = math.max(tonumber(dur) or 3, 1.5)
+    local holder = New("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 66), ClipsDescendants = false}, NotifyHolder)
     local card = New("Frame", {
         BackgroundColor3 = Theme.Top, Size = UDim2.new(1, 0, 1, 0),
         Position = UDim2.new(1, 20, 0, 0), BorderSizePixel = 0,
@@ -423,12 +423,14 @@ local function Notify(title, text, dur, force)
         Font = Enum.Font.Gotham, Text = text or "", TextColor3 = Theme.SubText, TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true,
     }, card)
-    Tween(card, 0.3, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Back)
-    task.delay(dur, function()
+    local showTween = Tween(card, 0.32, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Back)
+    task.spawn(function()
+        showTween.Completed:Wait()
+        task.wait(dur)
         if card.Parent then
-            Tween(card, 0.25, {Position = UDim2.new(1, 20, 0, 0)})
-            task.wait(0.28)
-            holder:Destroy()
+            local hideTween = Tween(card, 0.28, {Position = UDim2.new(1, 24, 0, 0)})
+            hideTween.Completed:Wait()
+            if holder.Parent then holder:Destroy() end
         end
     end)
 end
@@ -1718,9 +1720,24 @@ end -- do ConfigTab
 do
 ExtrasTab:Section("Быстрые действия")
 local function CopyValue(label, value)
-    if not setclipboard then error("Буфер обмена не поддерживается этим executor", 0) end
-    setclipboard(tostring(value))
-    Notify("Скопировано", label, 1.8)
+    local payload = tostring(value)
+    local writers = {
+        setclipboard,
+        toclipboard,
+        writeclipboard,
+        syn and syn.write_clipboard,
+        Clipboard and Clipboard.set,
+    }
+    local copied, lastError = false, nil
+    for _, writer in ipairs(writers) do
+        if type(writer) == "function" then
+            local ok, err = pcall(writer, payload)
+            if ok then copied = true break end
+            lastError = err
+        end
+    end
+    if not copied then error("Не удалось записать в буфер обмена: " .. tostring(lastError or "clipboard API недоступен"), 0) end
+    Notify("Скопировано", label .. " скопировано в буфер", 2.5, true)
 end
 
 ExtrasTab:Button("01 · Копировать Username", function() CopyValue("Username", LocalPlayer.Name) end, true)
@@ -4314,26 +4331,28 @@ end)
 
 FunEffectToggle("⚡ Электро (неоновый шторм)", "Electro", function()
     local folder = New("Folder", {Name="SL_Electro"}, workspace)
-    local t = 0
-    local conn = RunService.Heartbeat:Connect(function(dt)
-        t += dt
-        local r = GetRoot()
-        if not r or math.random() > 0.4 then return end
-        local part = New("Part", {
-            Size=Vector3.new(0.08, math.random(3,8), 0.08), Anchored=true,
-            CanCollide=false, CanTouch=false, CanQuery=false, CastShadow=false,
-            Material=Enum.Material.Neon, Color=Color3.fromRGB(100+math.random(0,155), 160+math.random(0,95), 255),
-            Transparency=0.1,
+    local conn = RunService.Heartbeat:Connect(function()
+        local root = GetRoot()
+        if not root or math.random() > 0.10 then return end
+        local startPos = root.Position + Vector3.new(math.random(-22,22), math.random(13,24), math.random(-22,22))
+        local endPos = startPos + Vector3.new(math.random(-9,9), -math.random(10,20), math.random(-9,9))
+        local delta = endPos - startPos
+        local bolt = New("Part", {
+            Name="SL_ElectricBolt", Anchored=true, CanCollide=false, CanTouch=false, CanQuery=false,
+            CastShadow=false, Material=Enum.Material.Neon,
+            Color=Color3.fromRGB(115, 205, 255), Transparency=0.08,
+            Size=Vector3.new(0.16, delta.Magnitude, 0.16),
+            CFrame=CFrame.lookAt((startPos + endPos) / 2, endPos) * CFrame.Angles(math.pi/2, 0, 0),
         }, folder)
-        local base = r.Position + Vector3.new(math.random(-6,6), math.random(0,8), math.random(-6,6))
-        part.CFrame = CFrame.new(base) * CFrame.Angles(math.random()*math.pi, math.random()*math.pi, 0)
+        local glow = New("PointLight", {Color=bolt.Color, Brightness=2, Range=10}, bolt)
         task.spawn(function()
-            for i=1,6 do
-                if not part.Parent then break end
-                part.Transparency = i/6
-                task.wait(0.025)
+            task.wait(0.10)
+            if bolt.Parent then
+                Tween(bolt, 0.22, {Transparency=1})
+                Tween(glow, 0.22, {Brightness=0})
+                task.wait(0.24)
+                if bolt.Parent then bolt:Destroy() end
             end
-            part:Destroy()
         end)
     end)
     return {object = folder, conn = conn}
@@ -6094,10 +6113,15 @@ local function removeSkyLock()
     if skyLightConn then skyLightConn:Disconnect() skyLightConn = nil end
 end
 
+local originalSky = {}
+for _, obj in ipairs(Lighting:GetChildren()) do
+    if obj:IsA("Sky") then
+        local ok, clone = pcall(function() return obj:Clone() end)
+        if ok and clone then table.insert(originalSky, clone) end
+    end
+end
 local function applySky(faces, lockTime)
-    -- Снимаем старый лок
     removeSkyLock()
-    -- Удаляем старое небо
     for _, obj in ipairs(Lighting:GetChildren()) do
         if obj:IsA("Sky") then obj:Destroy() end
     end
@@ -6173,7 +6197,11 @@ FunTab:Button(Lang.resetSky, function()
         if obj:IsA("Sky") then obj:Destroy() end
     end
     currentSky = nil
-    Notify(Lang.skySec, "Небо сброшено", 2)
+    for _, savedSky in ipairs(originalSky) do
+        local ok, clone = pcall(function() return savedSky:Clone() end)
+        if ok and clone then clone.Parent = Lighting end
+    end
+    Notify(Lang.skySec, "Исходное небо восстановлено", 2)
 end)
 
 OnUnload(function()
@@ -6665,6 +6693,7 @@ WorldTab:Button("Случайные цвета всем объектам", funct
     for _, o in ipairs(workspace:GetDescendants()) do
         local m = o:FindFirstAncestorOfClass("Model")
         if o:IsA("BasePart") and not (m and m:FindFirstChildOfClass("Humanoid")) then
+            if colorSaved[o] == nil then colorSaved[o] = o.Color end
             o.Color = Color3.fromHSV(math.random(), 0.8, 0.9)
             n += 1
         end
@@ -6673,11 +6702,12 @@ WorldTab:Button("Случайные цвета всем объектам", funct
 end)
 
 WorldTab:Button("Вернуть цвета мира", function()
+    if colorConn then colorConn:Disconnect() colorConn = nil end
     for part, col in pairs(colorSaved) do
         if part and part.Parent then part.Color = col end
     end
     colorSaved = {}
-    Notify("Мир", "Цвета восстановлены", 2)
+    Notify("Мир", "Исходные цвета восстановлены", 2)
 end)
 
 WorldTab:Section("Визуал: материалы")
