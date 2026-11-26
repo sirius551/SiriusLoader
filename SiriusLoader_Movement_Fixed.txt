@@ -6344,6 +6344,44 @@ OnUnload(function() LocalPlayer.CameraMode = Enum.CameraMode.Classic end)
 
 WorldTab:Section("Телепорты")
 local checkpoint
+local teleportMode = "Мгновенно"
+local teleportSpeed = 80
+local teleportToken = 0
+local teleportMethodBtn
+teleportMethodBtn = WorldTab:Button("Способ перемещения: " .. teleportMode .. " (нажми для смены)", function()
+    local modes = {"Мгновенно", "Tween", "Lerp"}
+    local idx = table.find(modes, teleportMode) or 1
+    teleportMode = modes[idx % #modes + 1]
+    teleportMethodBtn.Text = "Способ перемещения: " .. teleportMode .. " (нажми для смены)"
+end, true)
+WorldTab:Slider("Скорость Tween / Lerp (studs/s)", 10, 250, teleportSpeed, function(v)
+    teleportSpeed = v
+end, 0)
+local function MoveToCFrame(targetCFrame)
+    local root = GetRoot()
+    if not root then error("персонаж не найден", 0) end
+    teleportToken += 1
+    local token = teleportToken
+    if teleportMode == "Мгновенно" then
+        root.CFrame = targetCFrame
+        return
+    end
+    local startCFrame = root.CFrame
+    local distance = (targetCFrame.Position - startCFrame.Position).Magnitude
+    local duration = math.max(distance / math.max(teleportSpeed, 1), 0.05)
+    if teleportMode == "Tween" then
+        local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+        tween:Play()
+        tween.Completed:Wait()
+    else
+        local elapsed = 0
+        while elapsed < duration and token == teleportToken and root.Parent do
+            elapsed += RunService.Heartbeat:Wait()
+            root.CFrame = startCFrame:Lerp(targetCFrame, math.clamp(elapsed / duration, 0, 1))
+        end
+        if token == teleportToken and root.Parent then root.CFrame = targetCFrame end
+    end
+end
 WorldTab:Button("📍 Сохранить позицию", function()
     local r = GetRoot()
     if not r then error("персонаж не найден", 0) end
@@ -6353,14 +6391,14 @@ end)
 WorldTab:Button("↩ Вернуться на позицию", function()
     local r = GetRoot()
     if not (r and checkpoint) then error("позиция не сохранена", 0) end
-    r.CFrame = checkpoint
+    MoveToCFrame(checkpoint)
 end)
 WorldTab:Button("TP к ближайшему игроку", function()
     local target = nearestEnemy(math.huge, false)
     local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
     local r = GetRoot()
     if not (tr and r) then error("игроки не найдены", 0) end
-    r.CFrame = tr.CFrame * CFrame.new(0, 0, 3)
+    MoveToCFrame(tr.CFrame * CFrame.new(0, 0, 3))
 end)
 WorldTab:Button("TP к случайному игроку", function()
     local list = {}
@@ -6369,7 +6407,7 @@ WorldTab:Button("TP к случайному игроку", function()
     end
     local r = GetRoot()
     if #list == 0 or not r then error("игроки не найдены", 0) end
-    r.CFrame = list[math.random(#list)].Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+    MoveToCFrame(list[math.random(#list)].Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3))
 end)
 local coordText = ""
 WorldTab:Input("Координаты", "x, y, z", function(t) coordText = t end)
@@ -6377,7 +6415,7 @@ WorldTab:Button("Телепорт по координатам", function()
     local x, y, z = string.match(coordText, "(-?[%d%.]+)%s*,%s*(-?[%d%.]+)%s*,%s*(-?[%d%.]+)")
     if not x then error("формат: x, y, z", 0) end
     local r = GetRoot()
-    if r then r.CFrame = CFrame.new(tonumber(x), tonumber(y), tonumber(z)) end
+    if r then MoveToCFrame(CFrame.new(tonumber(x), tonumber(y), tonumber(z))) end
 end)
 WorldTab:Button("Показать мои координаты", function()
     local r = GetRoot()
