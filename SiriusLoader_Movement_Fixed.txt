@@ -8220,9 +8220,18 @@ do
 
     if type(req) == "function" and type(token) == "string" and token:match("^s1%.")
         and type(baseUrl) == "string" and baseUrl:match("^https://") then
-        local mcpRunning = true
+        local mcpRunning = false
         local mcpStarted = false
+        local mcpGeneration = 0
+        local riskAccepted = false
+        local RISK_FILE = "Sirius_MCP_Risk_Accepted.txt"
         local wasOnline = false
+
+        pcall(function()
+            if isfile and readfile and isfile(RISK_FILE) then
+                riskAccepted = readfile(RISK_FILE) == "SIRIUS_MCP_RISK_ACCEPTED_V1"
+            end
+        end)
 
         -- A cloud request can never execute arbitrary Lua without a fresh,
         -- on-device approval for the exact source shown in the dialog.
@@ -8425,12 +8434,47 @@ do
             end)
             accept.MouseButton1Click:Connect(function()
                 overlay:Destroy()
+                riskAccepted = true
+                if type(writefile) == "function" then
+                    local saved, saveError = pcall(writefile, RISK_FILE, "SIRIUS_MCP_RISK_ACCEPTED_V1")
+                    if saved then
+                        print("[Sirius MCP] Risk consent saved locally.")
+                    else
+                        warn("[Sirius MCP] Could not save risk consent: " .. tostring(saveError))
+                        Notify("Sirius MCP", "Согласие действует до закрытия executor: не удалось сохранить его на диск.", 6, true)
+                    end
+                else
+                    warn("[Sirius MCP] writefile unavailable; consent is session-only.")
+                    Notify("Sirius MCP", "Согласие действует только до закрытия executor: writefile недоступен.", 6, true)
+                end
                 if startMCP then startMCP() end
             end)
         end
 
-        UtilTab:Button("Запустить MCP", function()
-            showMCPWarning()
+        local mcpControlButton
+        local function updateMCPButton()
+            if mcpControlButton then
+                mcpControlButton.Text = mcpRunning and "Остановить MCP" or "Запустить MCP"
+            end
+        end
+
+        mcpControlButton = UtilTab:Button("Запустить MCP", function()
+            if mcpRunning then
+                mcpRunning = false
+                mcpStarted = false
+                mcpGeneration = mcpGeneration + 1
+                wasOnline = false
+                updateMCPButton()
+                Notify("Sirius MCP", "Облачное подключение остановлено.", 4, true)
+                print("[Sirius MCP] Stopped by user")
+                return
+            end
+
+            if riskAccepted then
+                if startMCP then startMCP() end
+            else
+                showMCPWarning()
+            end
         end, true)
         UtilTab:Button("Проверить соединение с Render", function()
             local ok, response = pcall(mcpRequest, "/health", "GET")
@@ -8484,10 +8528,14 @@ do
         UtilTab:Label("Удалённое выполнение Lua всегда требует отдельного подтверждения на этом устройстве.")
 
         startMCP = function()
-            if mcpStarted then return end
+            if mcpStarted or mcpRunning then return end
+            mcpRunning = true
             mcpStarted = true
+            mcpGeneration = mcpGeneration + 1
+            local thisGeneration = mcpGeneration
+            updateMCPButton()
             task.spawn(function()
-            while mcpRunning and ScreenGui.Parent do
+            while mcpRunning and thisGeneration == mcpGeneration and ScreenGui.Parent do
                 local ok, packet = pcall(mcpRequest, "/poll", "GET")
                 if ok then
                     if not wasOnline then
@@ -8563,9 +8611,20 @@ do
                 end
                 task.wait(1)
             end
+            if thisGeneration == mcpGeneration then
+                mcpRunning = false
+                mcpStarted = false
+                updateMCPButton()
+            end
             end)
-            table.insert(Cleanups, function() mcpRunning = false end)
+            table.insert(Cleanups, function()
+                mcpRunning = false
+                mcpStarted = false
+                mcpGeneration = mcpGeneration + 1
+                updateMCPButton()
+            end)
             Notify("Sirius MCP", "Облачный мост активен", 3)
+            print("[Sirius MCP] Polling loop started")
         end
     else
         warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile. При первом запуске устройство регистрируется автоматически.")
