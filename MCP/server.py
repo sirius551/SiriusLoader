@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP, Image as MCPImage
+from mcp.types import TextContent
 
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = Path(os.environ.get("SIRIUS_TOKEN_FILE", str(ROOT / "Sirius_MCP_Token.txt")))
@@ -198,10 +199,8 @@ def sirius_capture_screenshot() -> dict[str, Any]:
             stamp = time.strftime("%Y%m%d_%H%M%S")
             target = SCREENSHOT_DIR / f"sirius_{stamp}.png"
             image.save(target, format="PNG")
-        return [
-            {"type": "text", "text": json.dumps({"ok": True, "path": str(target), "width": image.width, "height": image.height}, ensure_ascii=False)},
-            MCPImage(data=target.read_bytes(), format="png"),
-        ]
+        details = json.dumps({"ok": True, "path": str(target), "width": image.width, "height": image.height}, ensure_ascii=False)
+        return [TextContent(type="text", text=details), MCPImage(data=target.read_bytes(), format="png")]
     except Exception as exc:
         return {"ok": False, "error": f"Screenshot failed: {exc}. Install the optional mss and Pillow packages."}
 
