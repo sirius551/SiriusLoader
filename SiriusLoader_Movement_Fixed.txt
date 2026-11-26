@@ -8479,7 +8479,6 @@ do
         warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile. При первом запуске устройство регистрируется автоматически.")
     end
 end
-end
 
 SelectTab("Главная")
 
