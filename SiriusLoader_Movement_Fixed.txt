@@ -8451,14 +8451,16 @@ do
             end)
         end
 
+        -- Keep the start/stop control directly under the cloud section header.
         local mcpControlButton
         local function updateMCPButton()
             if mcpControlButton then
-                mcpControlButton.Text = mcpRunning and "Остановить MCP" or "Запустить MCP"
+                mcpControlButton.Text = mcpRunning and "■  Остановить MCP" or "▶  Запустить MCP"
             end
         end
 
-        mcpControlButton = UtilTab:Button("Запустить MCP", function()
+        mcpControlButton = UtilTab:Button("▶  Запустить MCP", function()
+            print("[Sirius MCP] Control button clicked. Running=" .. tostring(mcpRunning))
             if mcpRunning then
                 mcpRunning = false
                 mcpStarted = false
@@ -8471,11 +8473,19 @@ do
             end
 
             if riskAccepted then
-                if startMCP then startMCP() end
+                if startMCP then
+                    startMCP()
+                else
+                    warn("[Sirius MCP] startMCP is not initialized.")
+                    Notify("Sirius MCP", "Не удалось запустить: функция запуска не готова.", 5, true)
+                end
             else
                 showMCPWarning()
             end
         end, true)
+        if not mcpControlButton then
+            warn("[Sirius MCP] UtilTab:Button did not return a button instance.")
+        end
         UtilTab:Button("Проверить соединение с Render", function()
             local ok, response = pcall(mcpRequest, "/health", "GET")
             if ok and response and response.ok == true then
