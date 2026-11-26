@@ -1397,11 +1397,9 @@ local function SetVisible(v)
     if v then
         MainFrame.Visible = true
         MainFrame.Size = UDim2.new(0, frameWidth, 0, minimized and 38 or frameHeight)
-        MainFrame.Position = UDim2.new(0.5, 0, 0.5, 8)
         MainFrame.BackgroundTransparency = 1
         MainScale.Scale = math.max(Config.Scale * 0.88, 0.05)
         Tween(MainFrame, 0.32, {
-            Position = UDim2.new(0.5, 0, 0.5, 0),
             BackgroundTransparency = Config.Transparency,
         }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
         Tween(MainScale, 0.32, {Scale = Config.Scale}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
@@ -1410,7 +1408,6 @@ local function SetVisible(v)
         end)
     else
         Tween(MainFrame, 0.24, {
-            Position = UDim2.new(0.5, 0, 0.5, 8),
             BackgroundTransparency = 1,
         }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         Tween(MainScale, 0.24, {Scale = math.max(Config.Scale * 0.86, 0.05)}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
@@ -1418,7 +1415,6 @@ local function SetVisible(v)
             if not uiVisible then
                 MainFrame.Visible = false
                 MainScale.Scale = Config.Scale
-                MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
             end
         end)
     end
@@ -3307,7 +3303,27 @@ VisualsTab:Toggle(VisualText("Дождевая атмосфера", "Rain Atmosp
         if indoor then
             -- Если игрок смотрит через открытое окно/проём наружу, дождь рисуется снаружи в направлении взгляда.
             local viewPoint = cam.CFrame.Position + cam.CFrame.LookVector * 70
-            local viewBlocked = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 70, rayParams)
+            local skippedWindows = {}
+            local viewBlocked = false
+            for _ = 1, 6 do
+                local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 70, rayParams)
+                if not hit then break end
+                local part = hit.Instance
+                local isWindow = part:IsA("BasePart") and (
+                    part.Material == Enum.Material.Glass
+                    or part.Transparency >= 0.35
+                    or string.find(string.lower(part.Name), "window", 1, true) ~= nil
+                )
+                if isWindow then
+                    table.insert(skippedWindows, part)
+                    local filters = {LocalPlayer.Character, rainFolder}
+                    for _, skipped in ipairs(skippedWindows) do table.insert(filters, skipped) end
+                    rayParams.FilterDescendantsInstances = filters
+                else
+                    viewBlocked = true
+                    break
+                end
+            end
             local skyBlocked = workspace:Raycast(viewPoint, Vector3.new(0, 150, 0), rayParams)
             if viewBlocked or skyBlocked then
                 rainSound.Volume = 0
