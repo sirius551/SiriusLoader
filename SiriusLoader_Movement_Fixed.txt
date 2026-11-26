@@ -63,6 +63,9 @@ local Config = {
     WallpaperColumns = 4,
     WallpaperFPS = 12,
     WallpaperTransparency = 0.15,
+    WallpaperFilePath = "",
+    MenuWidth = isMobile and 420 or 760,
+    MenuHeight = isMobile and 360 or 520,
 }
 
 pcall(function()
@@ -73,6 +76,8 @@ pcall(function()
 end)
 
 Config.Binds = type(Config.Binds) == "table" and Config.Binds or {}
+frameWidth = math.clamp(tonumber(Config.MenuWidth) or frameWidth, 420, 1100)
+frameHeight = math.clamp(tonumber(Config.MenuHeight) or frameHeight, 340, 900)
 
 -- Shared localization helper for every UI section.
 local function VisualText(ru, en)
@@ -466,7 +471,16 @@ local wallpaperFrameIndex, wallpaperClock = 0, 0
 local function ApplyWallpaper()
     local spriteId = NormalizeAssetId(Config.WallpaperSpriteId)
     local staticId = NormalizeAssetId(Config.WallpaperId)
-    WallpaperImage.Image = spriteId ~= "" and spriteId or staticId
+    local filePath = tostring(Config.WallpaperFilePath or "")
+    local localAsset = ""
+    if filePath ~= "" then
+        local getter = getcustomasset or getsynasset
+        if getter then
+            local ok, asset = pcall(getter, filePath)
+            if ok and type(asset) == "string" then localAsset = asset end
+        end
+    end
+    WallpaperImage.Image = localAsset ~= "" and localAsset or (spriteId ~= "" and spriteId or staticId)
     WallpaperImage.ImageTransparency = math.clamp(tonumber(Config.WallpaperTransparency) or 0.15, 0, 0.9)
     wallpaperFrameIndex, wallpaperClock = 0, 0
     if spriteId ~= "" then
@@ -495,7 +509,7 @@ Add(RunService.Heartbeat:Connect(function(dt)
     end
 end))
 
-local TopBar = New("Frame", {BackgroundColor3 = Theme.Top, BackgroundTransparency = 0.12, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 48), ZIndex = 3}, MainFrame)
+local TopBar = New("Frame", {BackgroundColor3 = Theme.Top, BackgroundTransparency = 0.12, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 48), ZIndex = 3, Active = true}, MainFrame)
 BindBg(TopBar, "BackgroundColor3", THEMES.dark.Top, THEMES.light.Top)
 local AccentLine = New("Frame", {Position = UDim2.new(0, 0, 1, -2), Size = UDim2.new(1, 0, 0, 2), BorderSizePixel = 0, ZIndex = 4}, TopBar)
 BindAccent(AccentLine, "BackgroundColor3")
@@ -613,6 +627,7 @@ local function MakeDraggable(handle, target)
     end))
 end
 MakeDraggable(TopBar, MainFrame)
+MakeDraggable(TitleLabel, MainFrame)
 
 -- Кнопка "вернуть окно на экран" — появляется если окно улетело
 -- Находится в фиксированном углу экрана, всегда доступна
@@ -905,7 +920,62 @@ local function RunUrl(name, url)
 end
 
 -- Чип с биндом клавиши рядом с функцией
-local function AttachBind(parent, id, action, pos)
+local PinnedWidgets = {}
+local PinnedPanel, PinnedList
+local function RefreshPinnedPanel()
+    if not PinnedPanel or not PinnedPanel.Parent then return end
+    for _, child in ipairs(PinnedList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    local order = 0
+    for id, entry in pairs(PinnedWidgets) do
+        order += 1
+        local row = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.05, BorderSizePixel = 0, Size = UDim2.new(1, -12, 0, 34), LayoutOrder = order}, PinnedList)
+        Round(row, 8)
+        New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(1, -92, 1, 0), Font = Enum.Font.GothamSemibold, Text = entry.Name, TextColor3 = Theme.Text, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd}, row)
+        local toggle = New("TextButton", {BackgroundColor3 = entry.Object:Get() and Theme.Accent or Color3.fromRGB(62, 66, 80), BorderSizePixel = 0, Position = UDim2.new(1, -78, 0.5, -10), Size = UDim2.new(0, 48, 0, 20), Text = entry.Object:Get() and "ON" or "OFF", TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 9, AutoButtonColor = false}, row)
+        Round(toggle, 8)
+        toggle.MouseButton1Click:Connect(function()
+            entry.Object:Set(not entry.Object:Get())
+            RefreshPinnedPanel()
+        end)
+        local unpin = New("TextButton", {BackgroundTransparency = 1, Position = UDim2.new(1, -26, 0, 0), Size = UDim2.new(0, 22, 1, 0), Text = "×", TextColor3 = Theme.SubText, Font = Enum.Font.GothamBold, TextSize = 14}, row)
+        unpin.MouseButton1Click:Connect(function() PinnedWidgets[id] = nil RefreshPinnedPanel() end)
+    end
+    PinnedPanel.Visible = next(PinnedWidgets) ~= nil
+    PinnedPanel.Size = UDim2.new(0, PinnedPanel.Size.X.Offset, 0, math.clamp(58 + order * 40, 100, 420))
+end
+
+local function EnsurePinnedPanel()
+    if PinnedPanel and PinnedPanel.Parent then return end
+    PinnedPanel = New("Frame", {Name = "PinnedFunctions", BackgroundColor3 = Theme.Background, BorderSizePixel = 0, Position = UDim2.new(0, 24, 0.55, 0), Size = UDim2.new(0, 270, 0, 120), Visible = false, ZIndex = 80, ClipsDescendants = true}, ScreenGui)
+    Round(PinnedPanel, 12)
+    New("UIStroke", {Color = Theme.Accent, Thickness = 1.2, Transparency = 0.25}, PinnedPanel)
+    local header = New("TextButton", {BackgroundColor3 = Theme.Top, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 30), Text = "ЗАКРЕПЛЁННЫЕ ФУНКЦИИ", Font = Enum.Font.GothamBold, TextSize = 9, TextColor3 = Theme.Text, AutoButtonColor = false, ZIndex = 81}, PinnedPanel)
+    Round(header, 10)
+    MakeDraggable(header, PinnedPanel)
+    PinnedList = New("ScrollingFrame", {BackgroundTransparency = 1, BorderSizePixel = 0, Position = UDim2.new(0, 0, 0, 34), Size = UDim2.new(1, 0, 1, -40), ScrollBarThickness = 3, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 81}, PinnedPanel)
+    New("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center}, PinnedList)
+    New("UIPadding", {PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 4)}, PinnedList)
+    local resize = New("TextButton", {BackgroundColor3 = Theme.Accent, BorderSizePixel = 0, AnchorPoint = Vector2.new(1,1), Position = UDim2.new(1, -3, 1, -3), Size = UDim2.new(0, 16, 0, 16), Text = "◢", TextColor3 = Color3.new(1,1,1), TextSize = 9, ZIndex = 83}, PinnedPanel)
+    Round(resize, 4)
+    local resizing, startPos, startSize = false
+    resize.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            resizing, startPos, startSize = true, input.Position, PinnedPanel.AbsoluteSize
+        end
+    end)
+    Add(UIS.InputChanged:Connect(function(input)
+        if not resizing or (input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch) then return end
+        local delta = input.Position - startPos
+        PinnedPanel.Size = UDim2.new(0, math.clamp(startSize.X + delta.X, 210, 520), 0, math.clamp(startSize.Y + delta.Y, 100, 620))
+    end))
+    Add(UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then resizing = false end
+    end))
+end
+
+local function AttachBind(parent, id, action, pos, toggleObject, displayName)
     Actions[id] = action
     local saved = Config.Binds[id]
     local chip = New("TextButton", {
@@ -915,6 +985,21 @@ local function AttachBind(parent, id, action, pos)
         Text = saved and string.sub(saved, 1, 6) or "—", ZIndex = 5,
     }, parent)
     Round(chip, 5)
+    if toggleObject then
+        local pin = New("TextButton", {BackgroundColor3 = Color3.fromRGB(35, 40, 52), BorderSizePixel = 0, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -108, 0.5, 0), Size = UDim2.new(0, 24, 0, 20), Text = PinnedWidgets[id] and "★" or "☆", TextColor3 = Theme.Accent, Font = Enum.Font.GothamBold, TextSize = 13, ZIndex = 5}, parent)
+        Round(pin, 6)
+        pin.MouseButton1Click:Connect(function()
+            if PinnedWidgets[id] then
+                PinnedWidgets[id] = nil
+                pin.Text = "☆"
+            else
+                EnsurePinnedPanel()
+                PinnedWidgets[id] = {Object = toggleObject, Name = displayName or id}
+                pin.Text = "★"
+            end
+            RefreshPinnedPanel()
+        end)
+    end
     chip.MouseButton1Click:Connect(function()
         if Listening then return end
         Listening = true
@@ -1156,7 +1241,7 @@ local function CreateTab(name, icon)
         AttachBind(f, name .. "/" .. text, function()
             obj:Set(not state)
             Notify(text, state and "ВКЛ" or "ВЫКЛ", 1.2)
-        end, UDim2.new(1, -56, 0.5, 0))
+        end, UDim2.new(1, -56, 0.5, 0), obj, text)
 
         render(false)
         if state then task.spawn(function() pcall(callback, state) end) end
@@ -1310,19 +1395,7 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Плавающая кнопка для мобильных / быстрого открытия
-local FloatBtn = New("TextButton", {
-    BackgroundColor3 = Theme.Top, Position = UDim2.new(0, 10, 0.5, -20), Size = UDim2.new(0, 40, 0, 40),
-    Text = "☰", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.Text, AutoButtonColor = false,
-    Visible = false, ZIndex = 60,
-}, ScreenGui)
-Round(FloatBtn, 20)
-local FloatStroke = New("UIStroke", {Thickness = 2}, FloatBtn)
-BindAccent(FloatStroke, "Color")
-MakeDraggable(FloatBtn, FloatBtn)
-FloatBtn.MouseButton1Click:Connect(function() SetVisible(not uiVisible) end)
-CloseBtn.MouseButton1Click:Connect(function() SetVisible(false) Notify("Меню скрыто", "Нажми " .. Config.ToggleKey .. " или ☰, чтобы открыть", 3) end)
-FloatBtn.Visible = true
+CloseBtn.MouseButton1Click:Connect(function() SetVisible(false) Notify("Меню скрыто", "Нажми " .. Config.ToggleKey .. ", чтобы открыть", 3) end)
 
 -- Горячая клавиша
 Add(UIS.InputBegan:Connect(function(input, gpe)
@@ -7585,10 +7658,37 @@ local sS = SettingsTab:Slider("Масштаб интерфейса", 0.6, 1.4, C
     MainScale.Scale = v
 end, 2)
 sS.OnRelease = SaveConfig
-SettingsTab:Toggle("Показывать плавающую кнопку ☰", true, function(v) FloatBtn.Visible = v end)
+local sW = SettingsTab:Slider("Ширина меню", 420, 1100, frameWidth, function(v)
+    frameWidth = math.floor(v)
+    Config.MenuWidth = frameWidth
+    Tween(MainFrame, 0.18, {Size = UDim2.new(0, frameWidth, 0, MainFrame.Size.Y.Offset)})
+end)
+sW.OnRelease = SaveConfig
+local sH = SettingsTab:Slider("Высота меню", 340, 900, frameHeight, function(v)
+    frameHeight = math.floor(v)
+    Config.MenuHeight = frameHeight
+    if not minimized then Tween(MainFrame, 0.18, {Size = UDim2.new(0, frameWidth, 0, frameHeight)}) end
+end)
+sH.OnRelease = SaveConfig
 SettingsTab:Toggle("Уведомления", Config.Notifications, function(v) Config.Notifications = v SaveConfig() end)
 
 SettingsTab:Section("Обои и фон")
+local wallpaperFileBox = SettingsTab:Input("Файл обоев", "Путь к PNG/JPG в папке executor", function(value)
+    Config.WallpaperFilePath = value
+    Config.WallpaperId, Config.WallpaperSpriteId = "", ""
+end)
+SettingsTab:Label("Локальный файл: положи PNG/JPG в папку executor и укажи путь. Нужен getcustomasset/getsynasset.")
+SettingsTab:Button("Применить файл обоев", function()
+    Config.WallpaperFilePath = wallpaperFileBox.Text
+    Config.WallpaperId, Config.WallpaperSpriteId = "", ""
+    local getter = getcustomasset or getsynasset
+    if not getter then Notify("Обои", "Executor не поддерживает локальные assets", 4, true) return end
+    local ok, asset = pcall(getter, Config.WallpaperFilePath)
+    if not ok or type(asset) ~= "string" then Notify("Обои", "Не удалось открыть файл. Проверь путь.", 4, true) return end
+    ApplyWallpaper()
+    SaveConfig()
+    Notify("Обои", "Локальное изображение применено", 2)
+end, true)
 local wallpaperBox = SettingsTab:Input("ID обоев", "Например: 1234567890", function(value)
     Config.WallpaperId = value
     Config.WallpaperSpriteId = ""
@@ -7616,7 +7716,8 @@ SettingsTab:Button("Применить обои", function()
     Notify("Обои", WallpaperImage.Image ~= "" and "Фон применён" or "Фон очищен", 2)
 end, true)
 SettingsTab:Button("Убрать обои", function()
-    Config.WallpaperId, Config.WallpaperSpriteId = "", ""
+    Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperFilePath = "", "", ""
+    wallpaperFileBox.Text = ""
     wallpaperBox.Text, spriteBox.Text = "", ""
     ApplyWallpaper()
     SaveConfig()
@@ -7643,6 +7744,9 @@ end, true)
 SettingsTab:Button("Сбросить настройки", function()
     Config.Transparency, Config.Scale, Config.Notifications, Config.ToggleKey = 0, 1, true, "RightShift"
     Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperTransparency = "", "", 0.15
+    Config.WallpaperFilePath = ""
+    Config.MenuWidth, Config.MenuHeight = isMobile and 420 or 760, isMobile and 360 or 520
+    frameWidth, frameHeight = Config.MenuWidth, Config.MenuHeight
     Config.WallpaperFPS, Config.WallpaperFrames, Config.WallpaperColumns = 12, 16, 4
     MainFrame.BackgroundTransparency, MainScale.Scale = 0, 1
     WallpaperTint.BackgroundTransparency = 0.42
@@ -7686,6 +7790,7 @@ if Config.LightTheme then ApplyFullTheme(true) end
 -- ==================== ПАСХАЛКА ====================
 local _eggDone = false
 local _eggClicks = 0
+local _eggClickToken = 0
 
 -- Экипирует набор аксессуаров/шмот на текущего и будущих персонажей игрока.
 -- Встроено напрямую (без похода на Pastebin), чтобы пасхалка не зависела от
@@ -7790,6 +7895,14 @@ end
 TitleLabel.MouseButton1Click:Connect(function()
     if _eggDone then return end
     _eggClicks += 1
+    _eggClickToken += 1
+    local thisClickToken = _eggClickToken
+    task.delay(10, function()
+        if thisClickToken == _eggClickToken and not _eggDone then
+            _eggClicks = 0
+            if TitleLabel.Parent then TitleLabel.Text = "SiriusLoader  |  " .. Author end
+        end
+    end)
     if _eggClicks >= 10 then
         _eggDone = true
         _eggClicks = 0
