@@ -929,20 +929,19 @@ local function RefreshPinnedPanel()
     local order = 0
     for id, entry in pairs(PinnedWidgets) do
         order += 1
-        local row = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.05, BorderSizePixel = 0, Size = UDim2.new(1, -12, 0, 34), LayoutOrder = order}, PinnedList)
+        local row = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.05, BorderSizePixel = 0, Size = UDim2.new(1, -12, 0, 34), LayoutOrder = order, ZIndex = 82}, PinnedList)
         Round(row, 8)
-        New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(1, -92, 1, 0), Font = Enum.Font.GothamSemibold, Text = entry.Name, TextColor3 = Theme.Text, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd}, row)
-        local toggle = New("TextButton", {BackgroundColor3 = entry.Object:Get() and Theme.Accent or Color3.fromRGB(62, 66, 80), BorderSizePixel = 0, Position = UDim2.new(1, -78, 0.5, -10), Size = UDim2.new(0, 48, 0, 20), Text = entry.Object:Get() and "ON" or "OFF", TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 9, AutoButtonColor = false}, row)
+        New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 0), Size = UDim2.new(1, -92, 1, 0), Font = Enum.Font.GothamSemibold, Text = entry.Name, TextColor3 = Theme.Text, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 83}, row)
+        local toggle = New("TextButton", {BackgroundColor3 = entry.Object:Get() and Theme.Accent or Color3.fromRGB(62, 66, 80), BorderSizePixel = 0, Position = UDim2.new(1, -78, 0.5, -10), Size = UDim2.new(0, 48, 0, 20), Text = entry.Object:Get() and "ON" or "OFF", TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 9, AutoButtonColor = false, ZIndex = 83}, row)
         Round(toggle, 8)
         toggle.MouseButton1Click:Connect(function()
             entry.Object:Set(not entry.Object:Get())
             RefreshPinnedPanel()
         end)
-        local unpin = New("TextButton", {BackgroundTransparency = 1, Position = UDim2.new(1, -26, 0, 0), Size = UDim2.new(0, 22, 1, 0), Text = "×", TextColor3 = Theme.SubText, Font = Enum.Font.GothamBold, TextSize = 14}, row)
+        local unpin = New("TextButton", {BackgroundTransparency = 1, Position = UDim2.new(1, -26, 0, 0), Size = UDim2.new(0, 22, 1, 0), Text = "×", TextColor3 = Theme.SubText, Font = Enum.Font.GothamBold, TextSize = 14, ZIndex = 83}, row)
         unpin.MouseButton1Click:Connect(function() PinnedWidgets[id] = nil RefreshPinnedPanel() end)
     end
     PinnedPanel.Visible = next(PinnedWidgets) ~= nil
-    PinnedPanel.Size = UDim2.new(0, PinnedPanel.Size.X.Offset, 0, math.clamp(58 + order * 40, 100, 420))
 end
 
 local function EnsurePinnedPanel()
