@@ -64,6 +64,7 @@ local Config = {
     WallpaperFPS = 12,
     WallpaperTransparency = 0.15,
     WallpaperFilePath = "",
+    WallpaperFileAnimated = false,
     MenuWidth = isMobile and 420 or 760,
     MenuHeight = isMobile and 360 or 520,
 }
@@ -483,7 +484,7 @@ local function ApplyWallpaper()
     WallpaperImage.Image = localAsset ~= "" and localAsset or (spriteId ~= "" and spriteId or staticId)
     WallpaperImage.ImageTransparency = math.clamp(tonumber(Config.WallpaperTransparency) or 0.15, 0, 0.9)
     wallpaperFrameIndex, wallpaperClock = 0, 0
-    if spriteId ~= "" then
+    if spriteId ~= "" or (localAsset ~= "" and Config.WallpaperFileAnimated == true) then
         local cols = math.clamp(math.floor(tonumber(Config.WallpaperColumns) or 4), 1, 16)
         local frames = math.clamp(math.floor(tonumber(Config.WallpaperFrames) or 16), 1, 256)
         local side = 1024 / cols
@@ -497,7 +498,9 @@ local function ApplyWallpaper()
 end
 ApplyWallpaper()
 Add(RunService.Heartbeat:Connect(function(dt)
-    if not WallpaperImage.Parent or NormalizeAssetId(Config.WallpaperSpriteId) == "" then return end
+    if not WallpaperImage.Parent then return end
+    local hasSprite = NormalizeAssetId(Config.WallpaperSpriteId) ~= "" or (tostring(Config.WallpaperFilePath or "") ~= "" and Config.WallpaperFileAnimated == true)
+    if not hasSprite then return end
     local fps = math.clamp(tonumber(Config.WallpaperFPS) or 12, 1, 30)
     wallpaperClock += dt
     if wallpaperClock >= 1 / fps then
@@ -7678,6 +7681,11 @@ local wallpaperFileBox = SettingsTab:Input("Файл обоев", "Путь к P
 end)
 wallpaperFileBox.Text = Config.WallpaperFilePath or ""
 SettingsTab:Label("Локальный файл: положи PNG/JPG в папку executor и укажи путь. Нужен getcustomasset/getsynasset.")
+SettingsTab:Toggle("Файл — анимированный спрайт-лист 4×4", Config.WallpaperFileAnimated or false, function(v)
+    Config.WallpaperFileAnimated = v
+    ApplyWallpaper()
+    SaveConfig()
+end)
 SettingsTab:Button("Применить файл обоев", function()
     Config.WallpaperFilePath = wallpaperFileBox.Text
     Config.WallpaperId, Config.WallpaperSpriteId = "", ""
@@ -7718,6 +7726,7 @@ SettingsTab:Button("Применить обои", function()
 end, true)
 SettingsTab:Button("Убрать обои", function()
     Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperFilePath = "", "", ""
+    Config.WallpaperFileAnimated = false
     wallpaperFileBox.Text = ""
     wallpaperBox.Text, spriteBox.Text = "", ""
     ApplyWallpaper()
@@ -7746,6 +7755,7 @@ SettingsTab:Button("Сбросить настройки", function()
     Config.Transparency, Config.Scale, Config.Notifications, Config.ToggleKey = 0, 1, true, "RightShift"
     Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperTransparency = "", "", 0.15
     Config.WallpaperFilePath = ""
+    Config.WallpaperFileAnimated = false
     Config.MenuWidth, Config.MenuHeight = isMobile and 420 or 760, isMobile and 360 or 520
     frameWidth, frameHeight = Config.MenuWidth, Config.MenuHeight
     Config.WallpaperFPS, Config.WallpaperFrames, Config.WallpaperColumns = 12, 16, 4
@@ -7757,6 +7767,8 @@ SettingsTab:Button("Сбросить настройки", function()
     ApplyAccent(presets[1][2], true)
     sR:Set(114) sG:Set(137) sB:Set(218)
     sW:Set(frameWidth) sH:Set(frameHeight)
+    Tween(MainFrame, 0.2, {Size = UDim2.new(0, frameWidth, 0, frameHeight)})
+    task.defer(function() ClampFrameToScreen(MainFrame) end)
     wallpaperFileBox.Text = ""
     keyBtn.Text = "Клавиша меню: RightShift (нажми, чтобы сменить)"
     SaveConfig()
@@ -7982,5 +7994,5 @@ MainFrame.BackgroundTransparency = Config.Transparency
 WallpaperTint.BackgroundTransparency = math.clamp(0.42 + Config.Transparency * 0.5, 0.42, 0.9)
 ApplyWallpaper()
 Tween(MainFrame, 0.45, {Size = UDim2.new(0, frameWidth, 0, frameHeight), BackgroundTransparency = Config.Transparency}, Enum.EasingStyle.Back)
-Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey .. " или кнопка ☰", 3)
+Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey, 3)
 print("[SiriusLoader]: v3 успешно загружен!")
