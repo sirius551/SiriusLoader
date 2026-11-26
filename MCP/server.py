@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import secrets
+import sys
 import threading
 import time
 import uuid
@@ -214,6 +215,6 @@ def sirius_read_recent_logs(max_lines: int = 100) -> dict[str, Any]:
     return {"ok": True, "lines": lines[-max(1, min(max_lines, 500)):]}
 
 if __name__ == "__main__":
-    print(f"Sirius MCP HTTP bridge: http://{HOST}:{PORT}")
-    print(f"Token file: {TOKEN_FILE}")
+    print(f"Sirius MCP HTTP bridge: http://{HOST}:{PORT}", file=sys.stderr)
+    print(f"Token file: {TOKEN_FILE}", file=sys.stderr)
     mcp.run(transport="stdio")
