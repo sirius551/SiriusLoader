@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image as MCPImage
 
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = Path(os.environ.get("SIRIUS_TOKEN_FILE", str(ROOT / "Sirius_MCP_Token.txt")))
@@ -158,6 +158,11 @@ def sirius_run_action(action_id: str) -> dict[str, Any]:
     return queue_command("run_action", id=action_id)
 
 @mcp.tool()
+def sirius_set_slider(control_id: str, value: float) -> dict[str, Any]:
+    """Set a registered Sirius slider to a numeric value. Use its exact id and min/max from sirius_list_controls."""
+    return queue_command("set_slider", id=control_id, value=value)
+
+@mcp.tool()
 def sirius_create_lua_script(filename: str, code: str) -> dict[str, Any]:
     """Create a Lua script file in the local MCP scripts folder. This only writes a file; it does not execute it."""
     safe_name = Path(filename).name
@@ -192,7 +197,10 @@ def sirius_capture_screenshot() -> dict[str, Any]:
             stamp = time.strftime("%Y%m%d_%H%M%S")
             target = SCREENSHOT_DIR / f"sirius_{stamp}.png"
             image.save(target, format="PNG")
-        return {"ok": True, "path": str(target), "width": image.width, "height": image.height}
+        return [
+            {"type": "text", "text": json.dumps({"ok": True, "path": str(target), "width": image.width, "height": image.height}, ensure_ascii=False)},
+            MCPImage(data=target.read_bytes(), format="png"),
+        ]
     except Exception as exc:
         return {"ok": False, "error": f"Screenshot failed: {exc}. Install the optional mss and Pillow packages."}
 
