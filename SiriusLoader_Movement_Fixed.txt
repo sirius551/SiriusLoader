@@ -5586,27 +5586,22 @@ local function playEmoteById(assetId)
 end
 
 local function playEmoteByName(name)
-    -- Пробуем через LocalScript Animate (FE-безопасный способ)
     local c = GetChar()
     if not c then error("нет персонажа", 0) end
+    local hum = c:FindFirstChildOfClass("Humanoid")
+    if not hum then error("Humanoid не найден", 0) end
     local animate = c:FindFirstChild("Animate")
     if animate then
-        -- Метод 1: через скрипт Animate (работает в большинстве игр)
-        local emoteEvent = animate:FindFirstChild("PlayEmote")
-        if emoteEvent and emoteEvent:IsA("RemoteEvent") then
-            pcall(function() emoteEvent:FireServer(name) end)
-            return
+        local playEmote = animate:FindFirstChild("PlayEmote")
+        if playEmote and playEmote:IsA("BindableFunction") then
+            local ok, result = pcall(function() return playEmote:Invoke(name) end)
+            if ok and result ~= false then return true end
         end
-        -- Метод 2: имитация /e команды через чат
-        pcall(function()
-            game:GetService("ReplicatedStorage")
-                :WaitForChild("DefaultChatSystemChatEvents", 2)
-                :WaitForChild("SayMessageRequest", 2)
-                :FireServer("/e " .. name, "All")
-        end)
-        return
     end
-    error("Animate не найден, попробуй эмоцию по ID", 0)
+    -- В новых версиях Roblox встроенные эмоции доступны через Humanoid.
+    local ok, result = pcall(function() return hum:PlayEmote(name) end)
+    if ok and result ~= false then return true end
+    error("Эта игра не предоставляет серверно-реплицируемый запуск эмоции '" .. tostring(name) .. "'. Используй доступную в игре эмоцию или разрешённый Asset ID.", 0)
 end
 
 -- Кнопка стоп
