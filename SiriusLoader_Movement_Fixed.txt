@@ -8359,7 +8359,7 @@ do
             local overlay = New("Frame", {
                 Name = "SiriusMCPWarningOverlay",
                 BackgroundColor3 = Color3.fromRGB(4, 6, 12),
-                BackgroundTransparency = 0.12,
+                BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 1, 0),
                 ZIndex = 950,
             }, ScreenGui)
@@ -8368,15 +8368,24 @@ do
                 Name = "SiriusMCPWarningCard",
                 AnchorPoint = Vector2.new(0.5, 0.5),
                 Position = UDim2.new(0.5, 0, 0.5, 0),
-                Size = UDim2.new(0.9, 0, 0, 350),
+                Size = UDim2.new(0.9, 0, 0, 360),
                 BackgroundColor3 = Color3.fromRGB(23, 25, 35),
                 BorderSizePixel = 0,
                 ZIndex = 951,
             }, overlay)
             Round(card, 16)
-            New("UIStroke", {Color = Color3.fromRGB(235, 82, 82), Thickness = 1.8}, card)
+            New("UISizeConstraint", {
+                MinSize = Vector2.new(300, 340),
+                MaxSize = Vector2.new(600, 420),
+            }, card)
+            local cardScale = New("UIScale", {Scale = 0.88}, card)
+            local warningStroke = New("UIStroke", {
+                Color = Color3.fromRGB(235, 82, 82),
+                Thickness = 1.8,
+                Transparency = 1,
+            }, card)
 
-            New("TextLabel", {
+            local titleLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, 18, 0, 14),
                 Size = UDim2.new(1, -36, 0, 42),
@@ -8385,10 +8394,11 @@ do
                 TextColor3 = Color3.fromRGB(255, 105, 105),
                 TextSize = 17,
                 TextWrapped = true,
+                TextTransparency = 1,
                 ZIndex = 952,
             }, card)
 
-            New("TextLabel", {
+            local bodyLabel = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, 20, 0, 66),
                 Size = UDim2.new(1, -40, 0, 206),
@@ -8399,6 +8409,7 @@ do
                 TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Top,
+                TextTransparency = 1,
                 ZIndex = 952,
             }, card)
 
@@ -8411,6 +8422,8 @@ do
                 Font = Enum.Font.GothamBold,
                 TextSize = 10,
                 TextWrapped = true,
+                BackgroundTransparency = 1,
+                TextTransparency = 1,
                 ZIndex = 952,
             }, card)
             Round(decline, 8)
@@ -8424,30 +8437,57 @@ do
                 Font = Enum.Font.GothamBold,
                 TextSize = 10,
                 TextWrapped = true,
+                BackgroundTransparency = 1,
+                TextTransparency = 1,
                 ZIndex = 952,
             }, card)
             Round(accept, 8)
 
+            -- Smooth entrance: dim the game first, then scale and reveal the dialog.
+            Tween(overlay, 0.28, {BackgroundTransparency = 0.28}, Enum.EasingStyle.Quad)
+            Tween(cardScale, 0.32, {Scale = 1}, Enum.EasingStyle.Back)
+            Tween(warningStroke, 0.28, {Transparency = 0.08}, Enum.EasingStyle.Quad)
+            Tween(titleLabel, 0.22, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(bodyLabel, 0.28, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(decline, 0.25, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(accept, 0.25, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+
+            local closing = false
+            local function closeWarning(afterClose)
+                if closing then return end
+                closing = true
+                Tween(overlay, 0.18, {BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+                local outTween = Tween(cardScale, 0.18, {Scale = 0.94}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                task.spawn(function()
+                    outTween.Completed:Wait()
+                    if overlay and overlay.Parent then overlay:Destroy() end
+                    if afterClose then afterClose() end
+                end)
+            end
+
             decline.MouseButton1Click:Connect(function()
-                overlay:Destroy()
+                closeWarning(function()
+                    Notify("Sirius MCP", "Подключение не запущено: ты отказался от рисков.", 4, true)
+                end) 
                 Notify("Sirius MCP", "Подключение не запущено: ты отказался от рисков.", 4, true)
             end)
             accept.MouseButton1Click:Connect(function()
-                overlay:Destroy()
-                riskAccepted = true
-                if type(writefile) == "function" then
-                    local saved, saveError = pcall(writefile, RISK_FILE, "SIRIUS_MCP_RISK_ACCEPTED_V1")
-                    if saved then
-                        print("[Sirius MCP] Risk consent saved locally.")
+                closeWarning(function()
+                    riskAccepted = true
+                    if type(writefile) == "function" then
+                        local saved, saveError = pcall(writefile, RISK_FILE, "SIRIUS_MCP_RISK_ACCEPTED_V1")
+                        if saved then
+                            print("[Sirius MCP] Risk consent saved locally.")
+                        else
+                            warn("[Sirius MCP] Could not save risk consent: " .. tostring(saveError))
+                            Notify("Sirius MCP", "Согласие действует до закрытия executor: не удалось сохранить его на диск.", 6, true)
+                        end
                     else
-                        warn("[Sirius MCP] Could not save risk consent: " .. tostring(saveError))
-                        Notify("Sirius MCP", "Согласие действует до закрытия executor: не удалось сохранить его на диск.", 6, true)
+                        warn("[Sirius MCP] writefile unavailable; consent is session-only.")
+                        Notify("Sirius MCP", "Согласие действует только до закрытия executor: writefile недоступен.", 6, true)
                     end
-                else
-                    warn("[Sirius MCP] writefile unavailable; consent is session-only.")
-                    Notify("Sirius MCP", "Согласие действует только до закрытия executor: writefile недоступен.", 6, true)
-                end
-                if startMCP then startMCP() end
+                    if startMCP then startMCP() end
+                end)
             end)
         end
 
