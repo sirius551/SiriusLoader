@@ -8064,6 +8064,10 @@ local function showSiriusWipeWarning()
             if #failed > 0 then
                 warn("[Sirius Wipe] Некоторые файлы не удалось удалить. См. консоль.")
             end
+            print("[Sirius Wipe] Unloading current Sirius session.")
+            task.delay(1, function()
+                pcall(UnloadHub)
+            end)
         end)
     end)
 end
