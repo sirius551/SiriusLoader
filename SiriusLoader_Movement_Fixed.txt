@@ -1401,7 +1401,19 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-CloseBtn.MouseButton1Click:Connect(function() SetVisible(false) Notify("Меню скрыто", "Нажми " .. Config.ToggleKey .. ", чтобы открыть", 3) end)
+-- Плавающая кнопка быстрого доступа: остаётся на экране, когда основное меню скрыто.
+local FloatBtn = New("TextButton", {
+    BackgroundColor3 = Theme.Top, Position = UDim2.new(0, 10, 0.5, -20), Size = UDim2.new(0, 40, 0, 40),
+    Text = "☰", Font = Enum.Font.GothamBold, TextSize = 18, TextColor3 = Theme.Text, AutoButtonColor = false,
+    Visible = true, ZIndex = 60,
+}, ScreenGui)
+Round(FloatBtn, 20)
+local FloatStroke = New("UIStroke", {Thickness = 2}, FloatBtn)
+BindAccent(FloatStroke, "Color")
+MakeDraggable(FloatBtn, FloatBtn)
+FloatBtn.MouseButton1Click:Connect(function() SetVisible(not uiVisible) end)
+
+CloseBtn.MouseButton1Click:Connect(function() SetVisible(false) Notify("Меню скрыто", "Нажми " .. Config.ToggleKey .. " или ☰, чтобы открыть", 3) end)
 
 -- Горячая клавиша
 Add(UIS.InputBegan:Connect(function(input, gpe)
@@ -1519,12 +1531,6 @@ do
         local row = cardText(activeCard, "", UDim2.new(0, 16, 0, 32 + (i - 1) * 19), UDim2.new(1, -32, 0, 18), 10, Theme.SubText, false)
         table.insert(activeRows, row)
     end
-
-    HomeTab:Section("БЫСТРЫЙ ДОСТУП")
-    HomeTab:Button("🎯  Combat", function() SelectTab("Combat") end, true)
-    HomeTab:Button("👁  Visuals", function() SelectTab("Visuals") end, true)
-    HomeTab:Button("🏃  Movement", function() SelectTab("Movement") end, true)
-    HomeTab:Button("⚙  Настройки", function() SelectTab("Settings") end, true)
 
     local dashClock = 0
     local fpsFrames, fpsElapsed, currentFPS = 0, 0, 0
@@ -7999,5 +8005,5 @@ MainFrame.BackgroundTransparency = Config.Transparency
 WallpaperTint.BackgroundTransparency = math.clamp(0.42 + Config.Transparency * 0.5, 0.42, 0.9)
 ApplyWallpaper()
 Tween(MainFrame, 0.45, {Size = UDim2.new(0, frameWidth, 0, frameHeight), BackgroundTransparency = Config.Transparency}, Enum.EasingStyle.Back)
-Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey, 3)
+Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey .. " или ☰", 3)
 print("[SiriusLoader]: v3 успешно загружен!")
