@@ -11,7 +11,7 @@ from collections import deque
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -269,11 +269,9 @@ def sirius_read_recent_logs(max_lines: int = 100) -> dict[str, Any]:
     return {"ok": True, "lines": entries}
 
 
-security = TransportSecuritySettings(
-    allowed_hosts=[HOSTNAME, f"{HOSTNAME}:*"],
-)
-mcp_app = mcp.streamable_http_app(
-    transport_security=security,
-    host="0.0.0.0",
-)
-app = TokenAuthMiddleware(mcp_app)
+# FastMCP in the pinned v1 SDK exposes streamable_http_app() without
+# transport_security/host keyword arguments. Validate the public Render
+# hostname with Starlette middleware instead of passing unsupported options.
+mcp_app = mcp.streamable_http_app()
+host_checked_app = TrustedHostMiddleware(mcp_app, allowed_hosts=[HOSTNAME])
+app = TokenAuthMiddleware(host_checked_app)
