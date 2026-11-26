@@ -451,6 +451,8 @@ local WallpaperTint = New("Frame", {
     BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ZIndex = 2,
 }, MainFrame)
 Round(WallpaperTint, 18)
+BindBg(WallpaperTint, "BackgroundColor3", THEMES.dark.Background, THEMES.light.Background)
+WallpaperTint.BackgroundTransparency = math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
 
 local function NormalizeAssetId(value)
     value = tostring(value or ""):match("^%s*(.-)%s*$")
@@ -979,6 +981,7 @@ local function CreateTab(name, icon)
         LayoutOrder = #Sidebar:GetChildren(),
     }, Sidebar)
     Round(btn, 10)
+    New("UIStroke", {Color = Theme.Accent, Transparency = 0.9, Thickness = 1}, btn)
     BindBg(btn, "BackgroundColor3", THEMES.dark.Element, THEMES.light.Element)
     BindBg(btn, "TextColor3", THEMES.dark.SubText, THEMES.light.SubText)
 
@@ -1033,7 +1036,8 @@ local function CreateTab(name, icon)
             Size = UDim2.new(1, 0, 0, 40), Font = Enum.Font.GothamSemibold, Text = text,
             TextColor3 = Theme.Text, TextSize = 12, LayoutOrder = nextOrder(),
         }, page)
-        Round(b, 6)
+        Round(b, 11)
+        New("UIStroke", {Color = Theme.Accent, Transparency = 0.91, Thickness = 1}, b)
         b.MouseEnter:Connect(function() Tween(b, 0.15, {BackgroundColor3 = Theme.ElementHover}) end)
         b.MouseLeave:Connect(function() Tween(b, 0.15, {BackgroundColor3 = Theme.Element}) end)
         local function run()
@@ -1063,8 +1067,9 @@ local function CreateTab(name, icon)
     end
 
     function tab:Input(text, placeholder, callback)
-        local f = New("Frame", {BackgroundColor3 = Theme.Element, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 34), LayoutOrder = nextOrder()}, page)
-        Round(f, 6)
+        local f = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 38), LayoutOrder = nextOrder()}, page)
+        Round(f, 10)
+        New("UIStroke", {Color = Theme.Accent, Transparency = 0.93, Thickness = 1}, f)
         New("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(0.4, -12, 1, 0),
             Font = Enum.Font.GothamSemibold, Text = text, TextColor3 = Theme.Text, TextSize = 12,
@@ -1108,7 +1113,8 @@ local function CreateTab(name, icon)
             BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
             Size = UDim2.new(1, 0, 0, 40), LayoutOrder = nextOrder(),
         }, page)
-        Round(f, 6)
+        Round(f, 10)
+        New("UIStroke", {Color = Theme.Accent, Transparency = 0.93, Thickness = 1}, f)
         New("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(1, -124, 1, 0),
             Font = Enum.Font.GothamSemibold, Text = text, TextColor3 = Theme.Text, TextSize = 12,
@@ -1168,7 +1174,8 @@ local function CreateTab(name, icon)
         decimals = decimals or 0
         local value = math.clamp(default, min, max)
         local f = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 54), LayoutOrder = nextOrder()}, page)
-        Round(f, 6)
+        Round(f, 10)
+        New("UIStroke", {Color = Theme.Accent, Transparency = 0.93, Thickness = 1}, f)
         New("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 4), Size = UDim2.new(1, -90, 0, 18),
             Font = Enum.Font.GothamSemibold, Text = text, TextColor3 = Theme.Text, TextSize = 12,
@@ -7486,6 +7493,7 @@ SettingsTab:Section("Внешний вид окна")
 local sT = SettingsTab:Slider("Прозрачность фона", 0, 0.85, Config.Transparency, function(v)
     Config.Transparency = v
     MainFrame.BackgroundTransparency = v
+    WallpaperTint.BackgroundTransparency = math.clamp(0.42 + v * 0.5, 0.42, 0.9)
 end, 2)
 sT.OnRelease = SaveConfig
 local sS = SettingsTab:Slider("Масштаб интерфейса", 0.6, 1.4, Config.Scale, function(v)
@@ -7553,6 +7561,7 @@ SettingsTab:Button("Сбросить настройки", function()
     Config.WallpaperId, Config.WallpaperSpriteId, Config.WallpaperTransparency = "", "", 0.15
     Config.WallpaperFPS, Config.WallpaperFrames, Config.WallpaperColumns = 12, 16, 4
     MainFrame.BackgroundTransparency, MainScale.Scale = 0, 1
+    WallpaperTint.BackgroundTransparency = 0.42
     WallpaperImage.Image = ""
     WallpaperImage.ImageTransparency = Config.WallpaperTransparency
     sT:Set(0) sS:Set(1)
@@ -7770,6 +7779,7 @@ SelectTab("Fling")
 
 MainFrame.Visible = true
 MainFrame.BackgroundTransparency = Config.Transparency
+WallpaperTint.BackgroundTransparency = math.clamp(0.42 + Config.Transparency * 0.5, 0.42, 0.9)
 ApplyWallpaper()
 Tween(MainFrame, 0.45, {Size = UDim2.new(0, frameWidth, 0, frameHeight), BackgroundTransparency = Config.Transparency}, Enum.EasingStyle.Back)
 Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey .. " или кнопка ☰", 3)
