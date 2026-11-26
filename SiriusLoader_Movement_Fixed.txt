@@ -3754,13 +3754,13 @@ VisualsTab:Toggle(VisualText("08 · Подсветка игроков", "08 · C
 end)
 
 -- 09–17: character and movement visuals
-VisualsTab:Section("Character FX · Movement")
-VisualsTab:Toggle("09 · Local Aura", false, function(v) VFX.LocalAura = v end)
-VisualsTab:Toggle("10 · Orbit Ring", false, function(v) VFX.OrbitRing = v end)
-VisualsTab:Toggle("11 · Jump Circle", false, function(v) VFX.JumpCircle = v end)
-VisualsTab:Toggle("12 · Landing Ripple", false, function(v) VFX.LandingRipple = v end)
-VisualsTab:Toggle("13 · Footstep Rings", false, function(v) VFX.FootstepRings = v end)
-VisualsTab:Toggle("14 · Speed Trail", false, function(v)
+VisualsTab:Section(VisualText("Эффекты персонажа · Движение", "Character FX · Movement"))
+VisualsTab:Toggle(VisualText("09 · Локальная аура", "09 · Local Aura"), false, function(v) VFX.LocalAura = v end)
+VisualsTab:Toggle(VisualText("10 · Кольцо орбиты", "10 · Orbit Ring"), false, function(v) VFX.OrbitRing = v end)
+VisualsTab:Toggle(VisualText("11 · Круг прыжка", "11 · Jump Circle"), false, function(v) VFX.JumpCircle = v end)
+VisualsTab:Toggle(VisualText("12 · Волна приземления", "12 · Landing Ripple"), false, function(v) VFX.LandingRipple = v end)
+VisualsTab:Toggle(VisualText("13 · Кольца шагов", "13 · Footstep Rings"), false, function(v) VFX.FootstepRings = v end)
+VisualsTab:Toggle(VisualText("14 · След скорости", "14 · Speed Trail"), false, function(v)
     VFX.SpeedTrail = v
     local c = LocalPlayer.Character
     local r = c and c:FindFirstChild("HumanoidRootPart")
@@ -3780,8 +3780,8 @@ VisualsTab:Toggle("14 · Speed Trail", false, function(v)
         end
     end
 end)
-VisualsTab:Toggle("15 · Jump Trail", false, function(v) VFX.JumpTrail = v end)
-VisualsTab:Toggle("16 · Character Glow", false, function(v)
+VisualsTab:Toggle(VisualText("15 · След прыжка", "15 · Jump Trail"), false, function(v) VFX.JumpTrail = v end)
+VisualsTab:Toggle(VisualText("16 · Свечение персонажа", "16 · Character Glow"), false, function(v)
     VFX.CharacterGlow = v
     local c = LocalPlayer.Character
     if c then
@@ -3794,7 +3794,7 @@ VisualsTab:Toggle("16 · Character Glow", false, function(v)
         }, c) end
     end
 end)
-VisualsTab:Toggle("17 · Outline Only", false, function(v)
+VisualsTab:Toggle(VisualText("17 · Только контур", "17 · Outline Only"), false, function(v)
     VFX.OutlineOnly = v
     local c = LocalPlayer.Character
     if c then
@@ -3810,25 +3810,25 @@ end)
 
 -- 18–22: screen and camera effects
 VisualsTab:Section(VisualText("Эффекты экрана · Камера", "Screen FX · Camera"))
-VisualsTab:Toggle("18 · Vignette Overlay", false, function(v)
+VisualsTab:Toggle(VisualText("18 · Затемнение по краям", "18 · Vignette Overlay"), false, function(v)
     VFX.Vignette = v
     VFXSetScreenLayer("Vignette", v and Color3.fromRGB(10, 10, 20) or nil, 0.88)
 end)
-VisualsTab:Toggle("19 · Cool Screen Tint", false, function(v)
+VisualsTab:Toggle(VisualText("19 · Холодный оттенок экрана", "19 · Cool Screen Tint"), false, function(v)
     VFX.ScreenTint = v
     VFXSetEffect("ScreenTint", "ColorCorrectionEffect", {
         TintColor = Color3.fromRGB(205, 225, 255), Saturation = 0.08, Contrast = 0.04,
     }, v)
 end)
-VisualsTab:Toggle("20 · Extra Bloom", false, function(v)
+VisualsTab:Toggle(VisualText("20 · Дополнительное свечение", "20 · Extra Bloom"), false, function(v)
     VFX.ExtraBloom = v
     VFXSetEffect("ExtraBloom", "BloomEffect", {Intensity = 0.55, Size = 32, Threshold = 0.9}, v)
 end)
-VisualsTab:Toggle("21 · Soft Blur", false, function(v)
+VisualsTab:Toggle(VisualText("21 · Мягкое размытие", "21 · Soft Blur"), false, function(v)
     VFX.SoftBlur = v
     VFXSetEffect("SoftBlur", "BlurEffect", {Size = 3}, v)
 end)
-VisualsTab:Toggle("22 · Camera Focus", false, function(v)
+VisualsTab:Toggle(VisualText("22 · Фокус камеры", "22 · Camera Focus"), false, function(v)
     VFX.CameraFocus = v
     VFXSetEffect("CameraFocus", "DepthOfFieldEffect", {
         FarIntensity = 0.12, NearIntensity = 0.05, FocusDistance = 30,
@@ -3838,7 +3838,7 @@ end)
 
 -- 23–27: atmosphere and world visuals
 VisualsTab:Section(VisualText("Эффекты мира · Атмосфера", "World FX · Atmosphere"))
-VisualsTab:Toggle("23 · Ambient Particles", false, function(v)
+VisualsTab:Toggle(VisualText("23 · Частицы атмосферы", "23 · Ambient Particles"), false, function(v)
     VFX.AmbientParticles = v
     local c = LocalPlayer.Character
     local r = c and c:FindFirstChild("HumanoidRootPart")
@@ -3857,13 +3857,13 @@ VisualsTab:Toggle("23 · Ambient Particles", false, function(v)
         end
     end
 end)
-VisualsTab:Toggle("24 · Star Particles", false, function(v)
+VisualsTab:Toggle(VisualText("24 · Звёздные частицы", "24 · Star Particles"), false, function(v)
     VFX.StarParticles = v
     VFXSetEffect("StarColor", "ColorCorrectionEffect", {
         Saturation = 0.22, Contrast = 0.06, TintColor = Color3.fromRGB(235, 225, 255),
     }, v)
 end)
-VisualsTab:Toggle("25 · Snow Atmosphere", false, function(v)
+VisualsTab:Toggle(VisualText("25 · Снежная атмосфера", "25 · Snow Atmosphere"), false, function(v)
     VFX.Snow = v
     local c = LocalPlayer.Character
     local r = c and c:FindFirstChild("HumanoidRootPart")
@@ -3882,26 +3882,26 @@ VisualsTab:Toggle("25 · Snow Atmosphere", false, function(v)
         end
     end
 end)
-VisualsTab:Toggle("26 · Extra Fog", false, function(v)
+VisualsTab:Toggle(VisualText("26 · Дополнительный туман", "26 · Extra Fog"), false, function(v)
     VFX.ExtraFog = v
     VFXSetEffect("ExtraFog", "ColorCorrectionEffect", {
         Contrast = -0.04, Saturation = -0.08, TintColor = Color3.fromRGB(220, 230, 245),
     }, v)
 end)
-VisualsTab:Toggle("27 · Extra Sun Rays", false, function(v)
+VisualsTab:Toggle(VisualText("27 · Дополнительные солнечные лучи", "27 · Extra Sun Rays"), false, function(v)
     VFX.ExtraSunRays = v
     VFXSetEffect("ExtraSunRays", "SunRaysEffect", {Intensity = 0.12, Spread = 0.8}, v)
 end)
 
 -- 28–30: finishing touches
-VisualsTab:Section("HUD · Finishing touches")
-VisualsTab:Toggle("28 · Neon World Tint", false, function(v)
+VisualsTab:Section(VisualText("HUD · Финальные эффекты", "HUD · Finishing touches"))
+VisualsTab:Toggle(VisualText("28 · Неоновый оттенок мира", "28 · Neon World Tint"), false, function(v)
     VFX.NeonWorld = v
     VFXSetEffect("NeonWorld", "ColorCorrectionEffect", {
         Saturation = 0.35, Contrast = 0.12, TintColor = Color3.fromRGB(220, 235, 255),
     }, v)
 end)
-VisualsTab:Toggle("29 · Center Dot", false, function(v)
+VisualsTab:Toggle(VisualText("29 · Центральная точка", "29 · Center Dot"), false, function(v)
     VFX.DotCrosshair = v
     if VFXGui.CenterDot then VFXGui.CenterDot:Destroy() VFXGui.CenterDot = nil end
     if v then
@@ -3914,7 +3914,7 @@ VisualsTab:Toggle("29 · Center Dot", false, function(v)
         VFXGui.CenterDot = dot
     end
 end)
-VisualsTab:Toggle("30 · Pulse Crosshair", false, function(v)
+VisualsTab:Toggle(VisualText("30 · Пульсирующий прицел", "30 · Pulse Crosshair"), false, function(v)
     VFX.PulseCrosshair = v
     if VFXGui.PulseDot then VFXGui.PulseDot:Destroy() VFXGui.PulseDot = nil end
     if v then
