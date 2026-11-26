@@ -577,14 +577,16 @@ local function ClampFrameToScreen(frame)
 end
 
 local function MakeDraggable(handle, target)
-    local dragging, dragInput, dragStart, startAbsolute
+    local dragging, dragInput, dragStart, startPosition
+    handle.Active = true
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
+            if UIS:GetFocusedTextBox() then return end
             dragging = true
             dragInput = input
             dragStart = input.Position
-            startAbsolute = target.AbsolutePosition
+            startPosition = target.Position
         end
     end)
 
@@ -593,30 +595,9 @@ local function MakeDraggable(handle, target)
         local isMouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
         local isTouchMove = input.UserInputType == Enum.UserInputType.Touch
         if not isMouseMove and not isTouchMove then return end
-
-        local camera = workspace.CurrentCamera
-        if not camera then return end
-        local scale = target:IsDescendantOf(MainFrame) and math.max(MainScale.Scale, 0.05) or 1
-        local delta = (input.Position - dragStart) / scale
-        local vp = camera.ViewportSize
-        local size = target.AbsoluteSize
-        local left = startAbsolute.X + delta.X
-        local top = startAbsolute.Y + delta.Y
-        local minX, minY = SAFE_SIDE, SAFE_TOP
-        local maxX = math.max(minX, vp.X - size.X - SAFE_SIDE)
-        local maxY = math.max(minY, vp.Y - size.Y - SAFE_BOTTOM)
-        left = math.clamp(left, minX, maxX)
-        top = math.clamp(top, minY, maxY)
-
-        local parent = target.Parent
-        local parentPos, parentSize = Vector2.zero, vp
-        if parent:IsA("GuiObject") then
-            parentPos, parentSize = parent.AbsolutePosition, parent.AbsoluteSize
-        end
-        local p = target.Position
-        local offsetX = (left + size.X * target.AnchorPoint.X - parentPos.X - parentSize.X * p.X.Scale) / scale
-        local offsetY = (top + size.Y * target.AnchorPoint.Y - parentPos.Y - parentSize.Y * p.Y.Scale) / scale
-        target.Position = UDim2.new(p.X.Scale, offsetX, p.Y.Scale, offsetY)
+        local delta = input.Position - dragStart
+        local p = startPosition
+        target.Position = UDim2.new(p.X.Scale, p.X.Offset + delta.X, p.Y.Scale, p.Y.Offset + delta.Y)
     end))
 
     Add(UIS.InputEnded:Connect(function(input)
@@ -625,7 +606,7 @@ local function MakeDraggable(handle, target)
         or input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            dragInput, dragStart, startAbsolute = nil, nil, nil
+            dragInput, dragStart, startPosition = nil, nil, nil
             task.defer(function() ClampFrameToScreen(target) end)
         end
     end))
@@ -1396,10 +1377,12 @@ local function SetVisible(v)
     uiVisible = v
     if v then
         MainFrame.Visible = true
-        MainFrame.Size = UDim2.new(0, frameWidth, 0, minimized and 38 or frameHeight)
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, math.max(1, frameWidth * 0.92), 0, math.max(1, (minimized and 38 or frameHeight) * 0.92))
         MainFrame.BackgroundTransparency = 1
-        MainScale.Scale = math.max(Config.Scale * 0.88, 0.05)
+        MainScale.Scale = math.max(Config.Scale * 0.92, 0.05)
         Tween(MainFrame, 0.32, {
+            Size = UDim2.new(0, frameWidth, 0, minimized and 38 or frameHeight),
             BackgroundTransparency = Config.Transparency,
         }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
         Tween(MainScale, 0.32, {Scale = Config.Scale}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
@@ -1408,12 +1391,14 @@ local function SetVisible(v)
         end)
     else
         Tween(MainFrame, 0.24, {
+            Size = UDim2.new(0, math.max(1, frameWidth * 0.90), 0, math.max(1, (minimized and 38 or frameHeight) * 0.90)),
             BackgroundTransparency = 1,
         }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        Tween(MainScale, 0.24, {Scale = math.max(Config.Scale * 0.86, 0.05)}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        Tween(MainScale, 0.24, {Scale = math.max(Config.Scale * 0.88, 0.05)}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         task.delay(0.26, function()
             if not uiVisible then
                 MainFrame.Visible = false
+                MainFrame.Size = UDim2.new(0, frameWidth, 0, minimized and 38 or frameHeight)
                 MainScale.Scale = Config.Scale
             end
         end)
@@ -3233,7 +3218,7 @@ VisualsTab:Script("PShaders", "https://raw.githubusercontent.com/randomstring0/p
 
 VisualsTab:Section("Освещение")
 local fbSaved
-VisualsTab:Toggle("Fullbright", false, function(on)
+VisualsTab:Toggle(VisualText("Полная яркость", "Fullbright"), false, function(on)
     if on then
         fbSaved = {Lighting.Brightness, Lighting.FogEnd, Lighting.OutdoorAmbient}
         Lighting.Brightness = 2
@@ -3824,7 +3809,7 @@ VisualsTab:Toggle("17 · Outline Only", false, function(v)
 end)
 
 -- 18–22: screen and camera effects
-VisualsTab:Section("Screen FX · Camera")
+VisualsTab:Section(VisualText("Эффекты экрана · Камера", "Screen FX · Camera"))
 VisualsTab:Toggle("18 · Vignette Overlay", false, function(v)
     VFX.Vignette = v
     VFXSetScreenLayer("Vignette", v and Color3.fromRGB(10, 10, 20) or nil, 0.88)
@@ -3852,7 +3837,7 @@ VisualsTab:Toggle("22 · Camera Focus", false, function(v)
 end)
 
 -- 23–27: atmosphere and world visuals
-VisualsTab:Section("World FX · Atmosphere")
+VisualsTab:Section(VisualText("Эффекты мира · Атмосфера", "World FX · Atmosphere"))
 VisualsTab:Toggle("23 · Ambient Particles", false, function(v)
     VFX.AmbientParticles = v
     local c = LocalPlayer.Character
@@ -3989,7 +3974,7 @@ end)
 end
 -- ==================== VISUALS: 15 ДОПОЛНИТЕЛЬНЫХ ФУНКЦИЙ ====================
 do
-VisualsTab:Section("Дополнительная камера и цвет")
+VisualsTab:Section(VisualText("Дополнительная камера и цвет", "Additional camera and color"))
 local extraVisualEffects = {}
 local function ExtraVisualEffect(key, className, props, enabled)
     local effect = extraVisualEffects[key]
