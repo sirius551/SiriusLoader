@@ -7924,6 +7924,148 @@ SettingsTab:Button("Убрать обои", function()
     Notify("Обои", "Стандартный фон восстановлен", 2)
 end, true)
 
+SettingsTab:Section("Данные и конфиденциальность")
+SettingsTab:Button("Сбросить согласие с рисками MCP", function()
+    if _G.SiriusMCPResetRiskConsent then
+        _G.SiriusMCPResetRiskConsent()
+        Notify("Sirius MCP", "Согласие сброшено. При следующем запуске MCP предупреждение появится снова.", 5, true)
+    else
+        pcall(function()
+            if delfile and isfile and isfile("Sirius_MCP_Risk_Accepted.txt") then
+                delfile("Sirius_MCP_Risk_Accepted.txt")
+            end
+        end)
+        Notify("Sirius MCP", "Файл согласия удалён. Перезапусти Loader, чтобы сбросить состояние в памяти.", 5, true)
+    end
+end, true)
+SettingsTab:Label("Полное удаление очистит файлы и данные, созданные Sirius Loader: конфигурацию, профили, сохранённые Lua-файлы в папке SiriusLoader, MCP-токен, URL и сохранённое согласие. Остальные файлы executor затронуты не будут.")
+
+local function showSiriusWipeWarning()
+    local overlay = New("Frame", {
+        Name = "SiriusWipeWarningOverlay",
+        BackgroundColor3 = Color3.fromRGB(4, 6, 12),
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 970,
+    }, ScreenGui)
+    local card = New("Frame", {
+        Name = "SiriusWipeWarningCard",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(0.9, 0, 0, 390),
+        BackgroundColor3 = Color3.fromRGB(23, 25, 35),
+        BorderSizePixel = 0,
+        ZIndex = 971,
+    }, overlay)
+    Round(card, 16)
+    New("UISizeConstraint", {MinSize = Vector2.new(310, 360), MaxSize = Vector2.new(620, 430)}, card)
+    local scale = New("UIScale", {Scale = 0.9}, card)
+    New("UIStroke", {Color = Color3.fromRGB(235, 82, 82), Thickness = 1.8}, card)
+    local heading = New("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(0, 22, 0, 18),
+        Size = UDim2.new(1, -44, 0, 42), Font = Enum.Font.GothamBold,
+        Text = "⚠  ПОЛНОЕ УДАЛЕНИЕ ДАННЫХ SIRIUS",
+        TextColor3 = Color3.fromRGB(255, 105, 105), TextSize = 17,
+        TextWrapped = true, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    local details = New("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(0, 22, 0, 72),
+        Size = UDim2.new(1, -44, 0, 235), Font = Enum.Font.Gotham,
+        Text = "Будут удалены:\n• SiriusLoader_Config.json — настройки интерфейса\n• SiriusLoader_Profiles/ и индекс профилей — сохранённые конфиги\n• Lua-файлы, сохранённые в папке SiriusLoader/\n• Sirius_MCP_Token.txt и Sirius_MCP_URL.txt — данные подключения\n• Sirius_MCP_Risk_Accepted.txt — сохранённое согласие\n\nЭто действие нельзя отменить. Остальные файлы executor и файлы вне перечисленных папок не затрагиваются. Если хочешь снова увидеть предупреждение MCP, достаточно сбросить только согласие, полное удаление для этого не требуется.",
+        TextColor3 = Color3.fromRGB(220, 222, 232), TextSize = 12,
+        TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    local cancel = New("TextButton", {
+        Position = UDim2.new(0, 18, 1, -60), Size = UDim2.new(0.48, -8, 0, 42),
+        BackgroundColor3 = Color3.fromRGB(65, 67, 78), Text = "ОТМЕНА",
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+        TextSize = 11, BackgroundTransparency = 1, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    Round(cancel, 8)
+    local erase = New("TextButton", {
+        Position = UDim2.new(0.52, 0, 1, -60), Size = UDim2.new(0.48, -18, 0, 42),
+        BackgroundColor3 = Color3.fromRGB(145, 48, 55), Text = "УДАЛИТЬ ДАННЫЕ",
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+        TextSize = 11, BackgroundTransparency = 1, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    Round(erase, 8)
+
+    Tween(overlay, 0.25, {BackgroundTransparency = 0.28}, Enum.EasingStyle.Quad)
+    Tween(scale, 0.3, {Scale = 1}, Enum.EasingStyle.Back)
+    Tween(heading, 0.2, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(details, 0.26, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(cancel, 0.24, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(erase, 0.24, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+
+    local closed = false
+    local function close(after)
+        if closed then return end
+        closed = true
+        Tween(overlay, 0.16, {BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+        local t = Tween(scale, 0.16, {Scale = 0.94}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        task.spawn(function()
+            t.Completed:Wait()
+            if overlay and overlay.Parent then overlay:Destroy() end
+            if after then after() end
+        end)
+    end
+    cancel.MouseButton1Click:Connect(function() close() end)
+    erase.MouseButton1Click:Connect(function()
+        close(function()
+            local removed, failed = {}, {}
+            local function removeFile(path)
+                local ok, err = pcall(function()
+                    if isfile and isfile(path) then
+                        if not delfile then error("delfile недоступен") end
+                        delfile(path)
+                    end
+                end)
+                if ok then table.insert(removed, path) else table.insert(failed, path .. ": " .. tostring(err)) end
+            end
+            local function removeFolderFiles(folder)
+                if not listfiles then
+                    table.insert(failed, folder .. ": listfiles недоступен")
+                    return
+                end
+                local ok, files = pcall(listfiles, folder)
+                if not ok then
+                    table.insert(failed, folder .. ": " .. tostring(files))
+                    return
+                end
+                for _, path in ipairs(files) do
+                    -- Only delete files returned from these exact Sirius-owned folders.
+                    if type(path) == "string" and (path:sub(1, #folder) == folder or path:sub(1, #folder - 1) == folder:sub(1, -2)) then
+                        removeFile(path)
+                    end
+                end
+            end
+
+            removeFile(CONFIG_FILE)
+            removeFile(PROFILE_INDEX)
+            removeFile("Sirius_MCP_Token.txt")
+            removeFile("Sirius_MCP_URL.txt")
+            removeFile("Sirius_MCP_Risk_Accepted.txt")
+            removeFolderFiles(PROFILES_DIR)
+            removeFolderFiles("SiriusLoader/")
+
+            if _G.SiriusMCPResetRiskConsent then pcall(_G.SiriusMCPResetRiskConsent) end
+            Config.Binds = {}
+            ProfileList = {}
+            ActiveProfile = nil
+            Notify("Sirius Loader", "Очистка завершена. Удалено файлов: " .. #removed .. "; ошибок: " .. #failed, 7, true)
+            print("[Sirius Wipe] Removed files:")
+            for _, path in ipairs(removed) do print("  [OK] " .. path) end
+            for _, err in ipairs(failed) do warn("[Sirius Wipe] " .. err) end
+            if #failed > 0 then
+                warn("[Sirius Wipe] Некоторые файлы не удалось удалить. См. консоль.")
+            end
+        end)
+    end)
+end
+
+SettingsTab:Button("⚠ Полностью удалить данные Sirius", showSiriusWipeWarning, true)
+
 SettingsTab:Section("Управление")
 local keyBtn
 keyBtn = SettingsTab:Button("Клавиша меню: " .. Config.ToggleKey .. " (нажми, чтобы сменить)", function()
@@ -8232,6 +8374,14 @@ do
                 riskAccepted = readfile(RISK_FILE) == "SIRIUS_MCP_RISK_ACCEPTED_V1"
             end
         end)
+
+        _G.SiriusMCPResetRiskConsent = function()
+            riskAccepted = false
+            pcall(function()
+                if delfile and isfile and isfile(RISK_FILE) then delfile(RISK_FILE) end
+            end)
+            print("[Sirius MCP] Saved risk consent cleared.")
+        end
 
         -- A cloud request can never execute arbitrary Lua without a fresh,
         -- on-device approval for the exact source shown in the dialog.
