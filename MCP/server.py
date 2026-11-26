@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import queue
@@ -188,7 +187,7 @@ def sirius_execute_lua(code: str, confirm_risk: bool = False) -> dict[str, Any]:
     return queue_command("execute_lua", code=code, confirm_risk=True)
 
 @mcp.tool()
-def sirius_capture_screenshot() -> dict[str, Any]:
+def sirius_capture_screenshot() -> list[TextContent | MCPImage]:
     """Capture the current desktop screenshot and return its local file path."""
     try:
         import mss
