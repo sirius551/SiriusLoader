@@ -450,7 +450,8 @@ local WallpaperTint = New("Frame", {
     Name = "WallpaperTint", BackgroundColor3 = Theme.Background, BackgroundTransparency = 0.42,
     BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ZIndex = 2,
 }, MainFrame)
-Round(WallpaperTint, 18)
+Round(WallpaperTint, 14)
+Round(WallpaperImage, 14)
 BindBg(WallpaperTint, "BackgroundColor3", THEMES.dark.Background, THEMES.light.Background)
 WallpaperTint.BackgroundTransparency = math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
 
@@ -661,11 +662,8 @@ local Sidebar = New("ScrollingFrame", {
 }, Body)
 Round(Sidebar, 14)
 BindBg(Sidebar, "BackgroundColor3", THEMES.dark.Sidebar, THEMES.light.Sidebar)
-local SidebarBrand = New("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, -12, 0, 48), LayoutOrder = 0}, Sidebar)
-New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 5), Size = UDim2.new(1, -16, 0, 20), Font = Enum.Font.GothamBlack, Text = "SIRIUS", TextColor3 = Theme.Text, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left}, SidebarBrand)
-New("TextLabel", {BackgroundTransparency = 1, Position = UDim2.new(0, 9, 0, 25), Size = UDim2.new(1, -16, 0, 14), Font = Enum.Font.Gotham, Text = "LOADER  •  V3", TextColor3 = Theme.SubText, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left}, SidebarBrand)
-New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center}, Sidebar)
-New("UIPadding", {PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6)}, Sidebar)
+New("UIListLayout", {Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center}, Sidebar)
+New("UIPadding", {PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 8)}, Sidebar)
 
 local Content = New("Frame", {
     BackgroundTransparency = 1, Position = UDim2.new(0, 174, 0, 10), Size = UDim2.new(1, -184, 1, -48),
@@ -1381,6 +1379,7 @@ end
 local aimbot, lockedTime
 
 -- ==================== ВКЛАДКИ ====================
+local HomeTab     = CreateTab("Главная", "⌂")
 local FlingTab    = CreateTab("Fling", "💥")
 local CombatTab   = CreateTab("Combat", "🎯")
 local RageTab     = CreateTab("Rage", "☠")
@@ -1396,6 +1395,68 @@ local ExecTab     = CreateTab("Executor", "⌨")
 local SettingsTab = CreateTab("Settings", "⚙")
 local ExtrasTab   = CreateTab("Extras", "✨")
 local ConfigTab   = CreateTab("Configs", "💾")
+
+-- ==================== HOME DASHBOARD ====================
+do
+    HomeTab:Section("QUANTUM-STYLE DASHBOARD")
+    local welcome = HomeTab:Label("Добро пожаловать в SiriusLoader")
+    welcome.TextSize = 18
+    welcome.Font = Enum.Font.GothamBlack
+    welcome.TextColor3 = Theme.Text
+    welcome.Size = UDim2.new(1, 0, 0, 34)
+
+    local subtitle = HomeTab:Label("Панель управления • быстрый доступ к функциям и состоянию клиента")
+    subtitle.TextSize = 11
+
+    HomeTab:Section("СОСТОЯНИЕ СЕССИИ")
+    local sessionLabel = HomeTab:Label("Загрузка статистики...")
+    sessionLabel.TextColor3 = Theme.Accent
+    sessionLabel.TextSize = 12
+
+    HomeTab:Section("БЫСТРЫЙ ДОСТУП")
+    HomeTab:Button("🎯  Открыть Combat", function() SelectTab("Combat") end, true)
+    HomeTab:Button("👁  Открыть Visuals", function() SelectTab("Visuals") end, true)
+    HomeTab:Button("🏃  Открыть Movement", function() SelectTab("Movement") end, true)
+    HomeTab:Button("⚙  Настройки интерфейса", function() SelectTab("Settings") end, true)
+
+    HomeTab:Section("АКТИВНЫЕ ФУНКЦИИ")
+    local activeRows = {}
+    for i = 1, 8 do
+        local row = HomeTab:Label("•  Нет активных функций")
+        row.TextSize = 11
+        row.TextColor3 = Theme.SubText
+        table.insert(activeRows, row)
+    end
+
+    local dashClock = 0
+    Add(RunService.Heartbeat:Connect(function(dt)
+        dashClock += dt
+        if dashClock < 0.75 then return end
+        dashClock = 0
+        local ping = "--"
+        pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) .. " ms" end)
+        sessionLabel.Text = string.format("FPS  %d     •     PING  %s     •     ИГРОКОВ  %d/%d",
+            math.floor(1 / math.max(dt, 0.001)), ping, #Players:GetPlayers(), Players.MaxPlayers)
+
+        local enabled = {}
+        for key, widget in pairs(WidgetRegistry) do
+            local ok, state = pcall(function() return widget:Get() end)
+            if ok and state == true then
+                table.insert(enabled, key)
+            end
+        end
+        table.sort(enabled)
+        for i, row in ipairs(activeRows) do
+            local key = enabled[i]
+            row.Text = key and ("●  " .. key) or (i == 1 and (#enabled == 0 and "•  Нет активных функций" or "•  Больше нет активных функций") or "")
+            row.Visible = key ~= nil or i == 1
+            row.TextColor3 = key and Theme.Accent or Theme.SubText
+        end
+        if #enabled > #activeRows then
+            activeRows[#activeRows].Text = "＋  И ещё " .. (#enabled - #activeRows) .. " функций"
+        end
+    end))
+end
 
 -- ==================== CONFIGS TAB ====================
 do
@@ -2059,7 +2120,6 @@ OnUnload(function() clicker.on = false end)
 CombatTab:Slider("Кликов в секунду", 1, 20, 10, function(v) clicker.cps = v end)
 
 
-CombatTab:Section("Выживаемость")
 CombatTab:Section("Позиционирование")
 CombatTab:Button("Прыгнуть за спину к ближайшему", function()
     local target, _, _ = nearestEnemy(80, false)
@@ -2079,8 +2139,7 @@ CombatTab:Button("Встать над ближайшим (угол атаки)",
     Notify("Combat", "Позиция сверху", 1.5)
 end)
 
-CombatTab:Section("Урон и ХП цели")
-CombatTab:Section("Визуальные бои")
+CombatTab:Section("Индикация урона")
 local showDmgConn, dmgConns = nil, {}
 CombatTab:Toggle("Показывать урон над головами", false, function(on)
     for _, c in ipairs(dmgConns) do pcall(function() c:Disconnect() end) end
@@ -7775,7 +7834,7 @@ Add(UIS.InputBegan:Connect(function(i, gpe)
     end
 end))
 
-SelectTab("Fling")
+SelectTab("Главная")
 
 MainFrame.Visible = true
 MainFrame.BackgroundTransparency = Config.Transparency
