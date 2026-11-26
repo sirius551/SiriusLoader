@@ -48,6 +48,7 @@
 - `sirius_get_status`
 - `sirius_list_controls`
 - `sirius_set_toggle(control_id, enabled)`
+- `sirius_set_slider(control_id, value)`
 - `sirius_run_action(action_id)`
 - `sirius_create_lua_script(filename, code)`
 - `sirius_execute_lua(code, confirm_risk)`
