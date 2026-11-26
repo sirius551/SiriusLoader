@@ -626,7 +626,6 @@ local function MakeDraggable(handle, target)
         end
     end))
 end
-MakeDraggable(TopBar, MainFrame)
 MakeDraggable(TitleLabel, MainFrame)
 
 -- Кнопка "вернуть окно на экран" — появляется если окно улетело
@@ -1225,6 +1224,7 @@ local function CreateTab(name, icon)
         function obj:Set(v, silent)
             state = v and true or false
             render(true)
+            if RefreshPinnedPanel then RefreshPinnedPanel() end
             if not silent then
                 task.spawn(function()
                     local ok, err = pcall(callback, state)
@@ -7663,13 +7663,13 @@ local sW = SettingsTab:Slider("Ширина меню", 420, 1100, frameWidth, fu
     Config.MenuWidth = frameWidth
     Tween(MainFrame, 0.18, {Size = UDim2.new(0, frameWidth, 0, MainFrame.Size.Y.Offset)})
 end)
-sW.OnRelease = SaveConfig
+sW.OnRelease = function() SaveConfig() ClampFrameToScreen(MainFrame) end
 local sH = SettingsTab:Slider("Высота меню", 340, 900, frameHeight, function(v)
     frameHeight = math.floor(v)
     Config.MenuHeight = frameHeight
     if not minimized then Tween(MainFrame, 0.18, {Size = UDim2.new(0, frameWidth, 0, frameHeight)}) end
 end)
-sH.OnRelease = SaveConfig
+sH.OnRelease = function() SaveConfig() ClampFrameToScreen(MainFrame) end
 SettingsTab:Toggle("Уведомления", Config.Notifications, function(v) Config.Notifications = v SaveConfig() end)
 
 SettingsTab:Section("Обои и фон")
@@ -7677,6 +7677,7 @@ local wallpaperFileBox = SettingsTab:Input("Файл обоев", "Путь к P
     Config.WallpaperFilePath = value
     Config.WallpaperId, Config.WallpaperSpriteId = "", ""
 end)
+wallpaperFileBox.Text = Config.WallpaperFilePath or ""
 SettingsTab:Label("Локальный файл: положи PNG/JPG в папку executor и укажи путь. Нужен getcustomasset/getsynasset.")
 SettingsTab:Button("Применить файл обоев", function()
     Config.WallpaperFilePath = wallpaperFileBox.Text
@@ -7691,11 +7692,12 @@ SettingsTab:Button("Применить файл обоев", function()
 end, true)
 local wallpaperBox = SettingsTab:Input("ID обоев", "Например: 1234567890", function(value)
     Config.WallpaperId = value
-    Config.WallpaperSpriteId = ""
+    Config.WallpaperSpriteId, Config.WallpaperFilePath = "", ""
+    wallpaperFileBox.Text = ""
 end)
 local spriteBox = SettingsTab:Input("ID аним. спрайт-листа", "Спрайт-лист 1024×1024", function(value)
     Config.WallpaperSpriteId = value
-    if value ~= "" then Config.WallpaperId = "" end
+    if value ~= "" then Config.WallpaperId, Config.WallpaperFilePath = "", "" wallpaperFileBox.Text = "" end
 end)
 SettingsTab:Label("Анимация: спрайт-лист 1024×1024 с одинаковыми кадрами.")
 local sWp = SettingsTab:Slider("Прозрачность обоев", 0, 0.9, Config.WallpaperTransparency or 0.15, function(v)
@@ -7755,6 +7757,8 @@ SettingsTab:Button("Сбросить настройки", function()
     sT:Set(0) sS:Set(1)
     ApplyAccent(presets[1][2], true)
     sR:Set(114) sG:Set(137) sB:Set(218)
+    sW:Set(frameWidth) sH:Set(frameHeight)
+    wallpaperFileBox.Text = ""
     keyBtn.Text = "Клавиша меню: RightShift (нажми, чтобы сменить)"
     SaveConfig()
     Notify("Настройки", "Сброшено по умолчанию", 2, true)
