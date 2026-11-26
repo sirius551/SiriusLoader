@@ -1233,7 +1233,7 @@ local function CreateTab(name, icon)
         }, sw)
         Round(knob, 8)
 
-        local obj = {}
+        local obj = {Kind = "toggle"}
         local function render(animate)
             local t = animate and 0.2 or 0
             Tween(sw, t, {BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(60, 60, 75)})
@@ -1301,7 +1301,7 @@ local function CreateTab(name, icon)
             local m = 10 ^ decimals
             return math.floor(v * m + 0.5) / m
         end
-        local obj = {}
+        local obj = {Kind = "slider", Min = min, Max = max}
         local function setValue(v, silent)
             value = fmt(math.clamp(v, min, max))
             local a = (value - min) / (max - min)
@@ -1312,7 +1312,7 @@ local function CreateTab(name, icon)
                 if not ok then warn("[ScriptHub Slider Error]: " .. text .. " -> " .. tostring(err)) end
             end
         end
-        function obj:Set(v) setValue(v, true) end
+        function obj:Set(v, silent) setValue(v, silent) end
         function obj:Get() return value end
 
         local dragging = false
@@ -8222,15 +8222,22 @@ do
                             local controls = {}
                             for key, widget in pairs(WidgetRegistry) do
                                 local good, state = pcall(function() return widget:Get() end)
-                                if good then table.insert(controls, {id = key, kind = "toggle_or_slider", value = state}) end
+                                if good then table.insert(controls, {id = key, kind = widget.Kind or "widget", value = state, min = widget.Min, max = widget.Max}) end
                             end
                             for key in pairs(Actions) do table.insert(controls, {id = key, kind = "action"}) end
                             table.sort(controls, function(a,b) return a.id < b.id end)
                             return controls
                         elseif command.type == "set_toggle" then
                             local widget = WidgetRegistry[tostring(command.id or "")]
-                            if not widget then error("Unknown widget: " .. tostring(command.id)) end
+                            if not widget or widget.Kind ~= "toggle" then error("Unknown toggle: " .. tostring(command.id)) end
                             widget:Set(command.value == true)
+                            return {id = command.id, value = widget:Get()}
+                        elseif command.type == "set_slider" then
+                            local widget = WidgetRegistry[tostring(command.id or "")]
+                            if not widget or widget.Kind ~= "slider" then error("Unknown slider: " .. tostring(command.id)) end
+                            local value = tonumber(command.value)
+                            if not value then error("Slider value must be numeric") end
+                            widget:Set(value, false)
                             return {id = command.id, value = widget:Get()}
                         elseif command.type == "run_action" then
                             local action = Actions[tostring(command.id or "")]
