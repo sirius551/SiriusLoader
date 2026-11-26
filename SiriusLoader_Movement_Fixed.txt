@@ -8049,7 +8049,11 @@ local function showSiriusWipeWarning()
             removeFolderFiles(PROFILES_DIR)
             removeFolderFiles("SiriusLoader/")
 
-            if _G.SiriusMCPResetRiskConsent then pcall(_G.SiriusMCPResetRiskConsent) end
+            if _G.SiriusMCPStopAndForget then
+                pcall(_G.SiriusMCPStopAndForget)
+            elseif _G.SiriusMCPResetRiskConsent then
+                pcall(_G.SiriusMCPResetRiskConsent)
+            end
             Config.Binds = {}
             ProfileList = {}
             ActiveProfile = nil
@@ -8381,6 +8385,21 @@ do
                 if delfile and isfile and isfile(RISK_FILE) then delfile(RISK_FILE) end
             end)
             print("[Sirius MCP] Saved risk consent cleared.")
+        end
+
+        _G.SiriusMCPStopAndForget = function()
+            mcpRunning = false
+            mcpStarted = false
+            mcpGeneration = mcpGeneration + 1
+            wasOnline = false
+            token = nil
+            riskAccepted = false
+            if delfile and isfile then
+                for _, path in ipairs({"Sirius_MCP_Token.txt", "Sirius_MCP_URL.txt", RISK_FILE}) do
+                    pcall(function() if isfile(path) then delfile(path) end end)
+                end
+            end
+            print("[Sirius MCP] Stopped and local credentials/consent cleared.")
         end
 
         -- A cloud request can never execute arbitrary Lua without a fresh,
