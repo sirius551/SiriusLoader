@@ -8221,6 +8221,7 @@ do
     if type(req) == "function" and type(token) == "string" and token:match("^s1%.")
         and type(baseUrl) == "string" and baseUrl:match("^https://") then
         local mcpRunning = true
+        local mcpStarted = false
         local wasOnline = false
 
         -- A cloud request can never execute arbitrary Lua without a fresh,
@@ -8344,6 +8345,93 @@ do
         end
 
         UtilTab:Section("Sirius MCP · Облако")
+        local startMCP
+        local function showMCPWarning()
+            local overlay = New("Frame", {
+                Name = "SiriusMCPWarningOverlay",
+                BackgroundColor3 = Color3.fromRGB(4, 6, 12),
+                BackgroundTransparency = 0.12,
+                Size = UDim2.new(1, 0, 1, 0),
+                ZIndex = 950,
+            }, ScreenGui)
+
+            local card = New("Frame", {
+                Name = "SiriusMCPWarningCard",
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0.9, 0, 0, 350),
+                BackgroundColor3 = Color3.fromRGB(23, 25, 35),
+                BorderSizePixel = 0,
+                ZIndex = 951,
+            }, overlay)
+            Round(card, 16)
+            New("UIStroke", {Color = Color3.fromRGB(235, 82, 82), Thickness = 1.8}, card)
+
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 18, 0, 14),
+                Size = UDim2.new(1, -36, 0, 42),
+                Font = Enum.Font.GothamBold,
+                Text = "⚠  ВНИМАНИЕ: РИСКИ ИСПОЛЬЗОВАНИЯ MCP",
+                TextColor3 = Color3.fromRGB(255, 105, 105),
+                TextSize = 17,
+                TextWrapped = true,
+                ZIndex = 952,
+            }, card)
+
+            New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 20, 0, 66),
+                Size = UDim2.new(1, -40, 0, 206),
+                Font = Enum.Font.Gotham,
+                Text = "MCP-сервер связывает внешний MCP-клиент с запущенным Sirius Loader. Полученные команды могут менять настройки интерфейса и запускать доступные действия. Отдельные запросы могут предлагать выполнение Lua-кода в executor.\n\nНеизвестные команды и код могут привести к сбоям, потере игрового прогресса или нежелательным действиям. Не передавай персональный токен другим людям и не подключай незнакомые MCP-клиенты. Перед подтверждением любого Lua-кода внимательно прочитай его.\n\nРазработчик Sirius Loader не несёт ответственности за последствия неправильного использования MCP-сервера, сторонних клиентов или переданных им команд. Подключение добровольное. Если не понимаешь риски, выбери отказ.",
+                TextColor3 = Color3.fromRGB(220, 222, 232),
+                TextSize = 12,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                ZIndex = 952,
+            }, card)
+
+            local decline = New("TextButton", {
+                Position = UDim2.new(0, 18, 1, -58),
+                Size = UDim2.new(0.48, -8, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(65, 42, 48),
+                Text = "Я НЕ СОГЛАСЕН С РИСКАМИ",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextWrapped = true,
+                ZIndex = 952,
+            }, card)
+            Round(decline, 8)
+
+            local accept = New("TextButton", {
+                Position = UDim2.new(0.52, 0, 1, -58),
+                Size = UDim2.new(0.48, -18, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(54, 105, 78),
+                Text = "Я СОГЛАСЕН С РИСКАМИ",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextWrapped = true,
+                ZIndex = 952,
+            }, card)
+            Round(accept, 8)
+
+            decline.MouseButton1Click:Connect(function()
+                overlay:Destroy()
+                Notify("Sirius MCP", "Подключение не запущено: ты отказался от рисков.", 4, true)
+            end)
+            accept.MouseButton1Click:Connect(function()
+                overlay:Destroy()
+                if startMCP then startMCP() end
+            end)
+        end
+
+        UtilTab:Button("Запустить MCP", function()
+            showMCPWarning()
+        end, true)
         UtilTab:Button("Проверить соединение с Render", function()
             local ok, response = pcall(mcpRequest, "/health", "GET")
             if ok and response and response.ok == true then
@@ -8395,7 +8483,10 @@ do
         UtilTab:Label("Если копирование недоступно, полная инструкция и пример конфигурации находятся в MCP/README.md.")
         UtilTab:Label("Удалённое выполнение Lua всегда требует отдельного подтверждения на этом устройстве.")
 
-        task.spawn(function()
+        startMCP = function()
+            if mcpStarted then return end
+            mcpStarted = true
+            task.spawn(function()
             while mcpRunning and ScreenGui.Parent do
                 local ok, packet = pcall(mcpRequest, "/poll", "GET")
                 if ok then
@@ -8472,9 +8563,10 @@ do
                 end
                 task.wait(1)
             end
-        end)
-        table.insert(Cleanups, function() mcpRunning = false end)
-        Notify("Sirius MCP", "Облачный мост активен", 3)
+            end)
+            table.insert(Cleanups, function() mcpRunning = false end)
+            Notify("Sirius MCP", "Облачный мост активен", 3)
+        end
     else
         warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile. При первом запуске устройство регистрируется автоматически.")
     end
