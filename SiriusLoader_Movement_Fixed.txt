@@ -7924,6 +7924,156 @@ SettingsTab:Button("Убрать обои", function()
     Notify("Обои", "Стандартный фон восстановлен", 2)
 end, true)
 
+SettingsTab:Section("Данные и конфиденциальность")
+SettingsTab:Button("Сбросить согласие с рисками MCP", function()
+    if _G.SiriusMCPResetRiskConsent then
+        _G.SiriusMCPResetRiskConsent()
+        Notify("Sirius MCP", "Согласие сброшено. При следующем запуске MCP предупреждение появится снова.", 5, true)
+    else
+        pcall(function()
+            if delfile and isfile and isfile("Sirius_MCP_Risk_Accepted.txt") then
+                delfile("Sirius_MCP_Risk_Accepted.txt")
+            end
+        end)
+        Notify("Sirius MCP", "Файл согласия удалён. Перезапусти Loader, чтобы сбросить состояние в памяти.", 5, true)
+    end
+end, true)
+SettingsTab:Label("Полное удаление очистит файлы и данные, созданные Sirius Loader: конфигурацию, профили, сохранённые Lua-файлы в папке SiriusLoader, MCP-токен, URL и сохранённое согласие. Остальные файлы executor затронуты не будут.")
+
+local function showSiriusWipeWarning()
+    local overlay = New("Frame", {
+        Name = "SiriusWipeWarningOverlay",
+        BackgroundColor3 = Color3.fromRGB(4, 6, 12),
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        ZIndex = 970,
+    }, ScreenGui)
+    local card = New("Frame", {
+        Name = "SiriusWipeWarningCard",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(0.9, 0, 0, 390),
+        BackgroundColor3 = Color3.fromRGB(23, 25, 35),
+        BorderSizePixel = 0,
+        ZIndex = 971,
+    }, overlay)
+    Round(card, 16)
+    New("UISizeConstraint", {MinSize = Vector2.new(310, 360), MaxSize = Vector2.new(620, 430)}, card)
+    local scale = New("UIScale", {Scale = 0.9}, card)
+    New("UIStroke", {Color = Color3.fromRGB(235, 82, 82), Thickness = 1.8}, card)
+    local heading = New("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(0, 22, 0, 18),
+        Size = UDim2.new(1, -44, 0, 42), Font = Enum.Font.GothamBold,
+        Text = "⚠  ПОЛНОЕ УДАЛЕНИЕ ДАННЫХ SIRIUS",
+        TextColor3 = Color3.fromRGB(255, 105, 105), TextSize = 17,
+        TextWrapped = true, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    local details = New("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(0, 22, 0, 72),
+        Size = UDim2.new(1, -44, 0, 235), Font = Enum.Font.Gotham,
+        Text = "Будут удалены:\n• SiriusLoader_Config.json — настройки интерфейса\n• SiriusLoader_Profiles/ и индекс профилей — сохранённые конфиги\n• Lua-файлы, сохранённые в папке SiriusLoader/\n• Sirius_MCP_Token.txt и Sirius_MCP_URL.txt — данные подключения\n• Sirius_MCP_Risk_Accepted.txt — сохранённое согласие\n\nЭто действие нельзя отменить. Остальные файлы executor и файлы вне перечисленных папок не затрагиваются. Если хочешь снова увидеть предупреждение MCP, достаточно сбросить только согласие, полное удаление для этого не требуется.",
+        TextColor3 = Color3.fromRGB(220, 222, 232), TextSize = 12,
+        TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    local cancel = New("TextButton", {
+        Position = UDim2.new(0, 18, 1, -60), Size = UDim2.new(0.48, -8, 0, 42),
+        BackgroundColor3 = Color3.fromRGB(65, 67, 78), Text = "ОТМЕНА",
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+        TextSize = 11, BackgroundTransparency = 1, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    Round(cancel, 8)
+    local erase = New("TextButton", {
+        Position = UDim2.new(0.52, 0, 1, -60), Size = UDim2.new(0.48, -18, 0, 42),
+        BackgroundColor3 = Color3.fromRGB(145, 48, 55), Text = "УДАЛИТЬ ДАННЫЕ",
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+        TextSize = 11, BackgroundTransparency = 1, TextTransparency = 1, ZIndex = 972,
+    }, card)
+    Round(erase, 8)
+
+    Tween(overlay, 0.25, {BackgroundTransparency = 0.28}, Enum.EasingStyle.Quad)
+    Tween(scale, 0.3, {Scale = 1}, Enum.EasingStyle.Back)
+    Tween(heading, 0.2, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(details, 0.26, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(cancel, 0.24, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+    Tween(erase, 0.24, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+
+    local closed = false
+    local function close(after)
+        if closed then return end
+        closed = true
+        Tween(overlay, 0.16, {BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+        local t = Tween(scale, 0.16, {Scale = 0.94}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        task.spawn(function()
+            t.Completed:Wait()
+            if overlay and overlay.Parent then overlay:Destroy() end
+            if after then after() end
+        end)
+    end
+    cancel.MouseButton1Click:Connect(function() close() end)
+    erase.MouseButton1Click:Connect(function()
+        close(function()
+            local removed, failed = {}, {}
+            local function removeFile(path)
+                local ok, err = pcall(function()
+                    if isfile and isfile(path) then
+                        if not delfile then error("delfile недоступен") end
+                        delfile(path)
+                    end
+                end)
+                if ok then table.insert(removed, path) else table.insert(failed, path .. ": " .. tostring(err)) end
+            end
+            local function removeFolderFiles(folder)
+                if not listfiles then
+                    table.insert(failed, folder .. ": listfiles недоступен")
+                    return
+                end
+                local ok, files = pcall(listfiles, folder)
+                if not ok then
+                    table.insert(failed, folder .. ": " .. tostring(files))
+                    return
+                end
+                for _, path in ipairs(files) do
+                    -- Only delete files returned from these exact Sirius-owned folders.
+                    if type(path) == "string" and (path:sub(1, #folder) == folder or path:sub(1, #folder - 1) == folder:sub(1, -2)) then
+                        removeFile(path)
+                    end
+                end
+            end
+
+            removeFile(CONFIG_FILE)
+            removeFile(PROFILE_INDEX)
+            removeFile("Sirius_MCP_Token.txt")
+            removeFile("Sirius_MCP_URL.txt")
+            removeFile("Sirius_MCP_Risk_Accepted.txt")
+            removeFolderFiles(PROFILES_DIR)
+            removeFolderFiles("SiriusLoader/")
+
+            if _G.SiriusMCPStopAndForget then
+                pcall(_G.SiriusMCPStopAndForget)
+            elseif _G.SiriusMCPResetRiskConsent then
+                pcall(_G.SiriusMCPResetRiskConsent)
+            end
+            Config.Binds = {}
+            ProfileList = {}
+            ActiveProfile = nil
+            Notify("Sirius Loader", "Очистка завершена. Удалено файлов: " .. #removed .. "; ошибок: " .. #failed, 7, true)
+            print("[Sirius Wipe] Removed files:")
+            for _, path in ipairs(removed) do print("  [OK] " .. path) end
+            for _, err in ipairs(failed) do warn("[Sirius Wipe] " .. err) end
+            if #failed > 0 then
+                warn("[Sirius Wipe] Некоторые файлы не удалось удалить. См. консоль.")
+            end
+            print("[Sirius Wipe] Unloading current Sirius session.")
+            task.delay(1, function()
+                pcall(UnloadHub)
+            end)
+        end)
+    end)
+end
+
+SettingsTab:Button("⚠ Полностью удалить данные Sirius", showSiriusWipeWarning, true)
+
 SettingsTab:Section("Управление")
 local keyBtn
 keyBtn = SettingsTab:Button("Клавиша меню: " .. Config.ToggleKey .. " (нажми, чтобы сменить)", function()
@@ -8181,7 +8331,7 @@ end))
 -- Render cloud bridge. Requires executor HTTP request API + readfile.
 do
     local req = (syn and syn.request) or (http and http.request) or http_request or request
-    local token, baseUrl
+    local token, baseUrl = nil, "https://sirius-mcp.onrender.com"
     pcall(function()
         if readfile and isfile and isfile("Sirius_MCP_Token.txt") then
             token = (readfile("Sirius_MCP_Token.txt") or ""):gsub("%s+", "")
@@ -8191,10 +8341,70 @@ do
         end
     end)
 
-    if type(req) == "function" and type(token) == "string" and #token >= 32
+    -- Public release: each installation registers once and stores its own signed token.
+    -- The server signing secret is never embedded in this published script.
+    if type(req) == "function" and type(baseUrl) == "string" and baseUrl:match("^https://")
+        and (type(token) ~= "string" or not token:match("^s1%.")) then
+        local registered, registration = pcall(function()
+            local response = req({
+                Url = baseUrl .. "/register",
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = "{}",
+            })
+            if not response then error("Registration returned no response") end
+            local status = tonumber(response.StatusCode or response.Status or 200) or 200
+            if status < 200 or status >= 300 then error("Registration HTTP " .. status) end
+            return HttpService:JSONDecode(response.Body or response.body or "{}")
+        end)
+        if registered and type(registration) == "table" and registration.ok == true
+            and type(registration.token) == "string" and registration.token:match("^s1%.") then
+            if type(writefile) == "function" then
+                local saved = pcall(writefile, "Sirius_MCP_Token.txt", registration.token)
+                if saved then token = registration.token end
+            end
+        else
+            warn("[Sirius MCP] Device registration failed: " .. tostring(registration))
+        end
+    end
+
+    if type(req) == "function" and type(token) == "string" and token:match("^s1%.")
         and type(baseUrl) == "string" and baseUrl:match("^https://") then
-        local mcpRunning = true
+        local mcpRunning = false
+        local mcpStarted = false
+        local mcpGeneration = 0
+        local riskAccepted = false
+        local RISK_FILE = "Sirius_MCP_Risk_Accepted.txt"
         local wasOnline = false
+
+        pcall(function()
+            if isfile and readfile and isfile(RISK_FILE) then
+                riskAccepted = readfile(RISK_FILE) == "SIRIUS_MCP_RISK_ACCEPTED_V1"
+            end
+        end)
+
+        _G.SiriusMCPResetRiskConsent = function()
+            riskAccepted = false
+            pcall(function()
+                if delfile and isfile and isfile(RISK_FILE) then delfile(RISK_FILE) end
+            end)
+            print("[Sirius MCP] Saved risk consent cleared.")
+        end
+
+        _G.SiriusMCPStopAndForget = function()
+            mcpRunning = false
+            mcpStarted = false
+            mcpGeneration = mcpGeneration + 1
+            wasOnline = false
+            token = nil
+            riskAccepted = false
+            if delfile and isfile then
+                for _, path in ipairs({"Sirius_MCP_Token.txt", "Sirius_MCP_URL.txt", RISK_FILE}) do
+                    pcall(function() if isfile(path) then delfile(path) end end)
+                end
+            end
+            print("[Sirius MCP] Stopped and local credentials/consent cleared.")
+        end
 
         -- A cloud request can never execute arbitrary Lua without a fresh,
         -- on-device approval for the exact source shown in the dialog.
@@ -8237,7 +8447,7 @@ do
                 Font = Enum.Font.Gotham,
                 Text = "Облачный запрос просит выполнить код в executor. Проверь весь текст ниже. Неизвестный код может менять игру, обращаться к данным или вызывать внешние функции.",
                 TextColor3 = Color3.fromRGB(220, 220, 230),
-                TextSize = 12,
+                TextSize = 13,
                 TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 ZIndex = 902,
@@ -8317,6 +8527,213 @@ do
         end
 
         UtilTab:Section("Sirius MCP · Облако")
+        local startMCP
+        local function showMCPWarning()
+            local overlay = New("Frame", {
+                Name = "SiriusMCPWarningOverlay",
+                BackgroundColor3 = Color3.fromRGB(4, 6, 12),
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 1, 0),
+                ZIndex = 950,
+            }, ScreenGui)
+
+            local card = New("Frame", {
+                Name = "SiriusMCPWarningCard",
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0.9, 0, 0, 440),
+                BackgroundColor3 = Color3.fromRGB(23, 25, 35),
+                BorderSizePixel = 0,
+                ZIndex = 951,
+            }, overlay)
+            Round(card, 16)
+            New("UISizeConstraint", {
+                MinSize = Vector2.new(320, 420),
+                MaxSize = Vector2.new(680, 500),
+            }, card)
+            local cardScale = New("UIScale", {Scale = 0.88}, card)
+            local warningStroke = New("UIStroke", {
+                Color = Color3.fromRGB(235, 82, 82),
+                Thickness = 1.8,
+                Transparency = 1,
+            }, card)
+
+            local titleLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 24, 0, 20),
+                Size = UDim2.new(1, -48, 0, 48),
+                Font = Enum.Font.GothamBold,
+                Text = "⚠  ВНИМАНИЕ: РИСКИ ИСПОЛЬЗОВАНИЯ MCP",
+                TextColor3 = Color3.fromRGB(255, 105, 105),
+                TextSize = 17,
+                TextWrapped = true,
+                TextTransparency = 1,
+                ZIndex = 952,
+            }, card)
+
+            local bodyLabel = New("TextLabel", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 24, 0, 82),
+                Size = UDim2.new(1, -48, 0, 286),
+                Font = Enum.Font.Gotham,
+                Text = "ЧТО ДЕЛАЕТ MCP\nВнешний MCP-клиент получает доступ к функциям запущенного Sirius Loader: может менять настройки интерфейса, запускать доступные действия и отправлять запросы на выполнение Lua-кода в executor.\n\nВОЗМОЖНЫЕ РИСКИ\nНепроверенные команды и скрипты могут вызвать сбои, изменить игровой процесс или привести к нежелательным действиям. Подключай только известные тебе клиенты. Не передавай персональный токен третьим лицам. Перед каждым подтверждением Lua-кода внимательно проверяй его содержимое.\n\nОТВЕТСТВЕННОСТЬ\nРазработчик Sirius Loader предоставляет MCP-функции «как есть» и не несёт ответственности за ущерб, сбои, потерю данных или прогресса, а также иные последствия, возникшие из-за неправильного использования сервера, действий сторонних MCP-клиентов, переданных команд или самостоятельно добавленного кода, в пределах, допускаемых применимым законодательством. Пользователь самостоятельно проверяет команды и решает, какие действия разрешать.\n\nЕсли не уверен в источнике команды или не понимаешь её назначение, не подтверждай её и выбери отказ.",
+                TextColor3 = Color3.fromRGB(220, 222, 232),
+                TextSize = 12,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                TextTransparency = 1,
+                ZIndex = 952,
+            }, card)
+
+            local decline = New("TextButton", {
+                Position = UDim2.new(0, 18, 1, -58),
+                Size = UDim2.new(0.48, -8, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(65, 42, 48),
+                Text = "Я НЕ СОГЛАСЕН С РИСКАМИ",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextWrapped = true,
+                BackgroundTransparency = 1,
+                TextTransparency = 1,
+                ZIndex = 952,
+            }, card)
+            Round(decline, 8)
+
+            local accept = New("TextButton", {
+                Position = UDim2.new(0.52, 0, 1, -58),
+                Size = UDim2.new(0.48, -18, 0, 42),
+                BackgroundColor3 = Color3.fromRGB(54, 105, 78),
+                Text = "Я СОГЛАСЕН С РИСКАМИ",
+                TextColor3 = Color3.new(1, 1, 1),
+                Font = Enum.Font.GothamBold,
+                TextSize = 10,
+                TextWrapped = true,
+                BackgroundTransparency = 1,
+                TextTransparency = 1,
+                ZIndex = 952,
+            }, card)
+            Round(accept, 8)
+
+            -- Smooth entrance: dim the game first, then scale and reveal the dialog.
+            Tween(overlay, 0.28, {BackgroundTransparency = 0.28}, Enum.EasingStyle.Quad)
+            Tween(cardScale, 0.32, {Scale = 1}, Enum.EasingStyle.Back)
+            Tween(warningStroke, 0.28, {Transparency = 0.08}, Enum.EasingStyle.Quad)
+            Tween(titleLabel, 0.22, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(bodyLabel, 0.28, {TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(decline, 0.25, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+            Tween(accept, 0.25, {BackgroundTransparency = 0, TextTransparency = 0}, Enum.EasingStyle.Quad)
+
+            local closing = false
+            local function closeWarning(afterClose)
+                if closing then return end
+                closing = true
+                Tween(overlay, 0.18, {BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+                local outTween = Tween(cardScale, 0.18, {Scale = 0.94}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                task.spawn(function()
+                    outTween.Completed:Wait()
+                    if overlay and overlay.Parent then overlay:Destroy() end
+                    if afterClose then afterClose() end
+                end)
+            end
+
+            decline.MouseButton1Click:Connect(function()
+                closeWarning(function()
+                    Notify("Sirius MCP", "Подключение не запущено: ты отказался от рисков.", 4, true)
+                end)
+            end)
+            accept.MouseButton1Click:Connect(function()
+                closeWarning(function()
+                    riskAccepted = true
+                    if type(writefile) == "function" then
+                        local saved, saveError = pcall(writefile, RISK_FILE, "SIRIUS_MCP_RISK_ACCEPTED_V1")
+                        if saved then
+                            print("[Sirius MCP] Risk consent saved locally.")
+                        else
+                            warn("[Sirius MCP] Could not save risk consent: " .. tostring(saveError))
+                            Notify("Sirius MCP", "Согласие действует до закрытия executor: не удалось сохранить его на диск.", 6, true)
+                        end
+                    else
+                        warn("[Sirius MCP] writefile unavailable; consent is session-only.")
+                        Notify("Sirius MCP", "Согласие действует только до закрытия executor: writefile недоступен.", 6, true)
+                    end
+                    if startMCP then startMCP() end
+                    if not _G.SiriusInstallerLinkButton then
+                        _G.SiriusInstallerLinkButton = true
+                        UtilTab:Button("Скопировать ссылку на установщик MCP сервера", function()
+                            local installerUrl = "https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstaller.exe"
+                            local copied = false
+                            if type(setclipboard) == "function" then
+                                copied = pcall(setclipboard, installerUrl)
+                            elseif type(toclipboard) == "function" then
+                                copied = pcall(toclipboard, installerUrl)
+                            end
+                            if copied then
+                                Notify("Sirius MCP", "Ссылка на установщик скопирована.", 4, true)
+                            else
+                                Notify("Sirius MCP", "Буфер обмена недоступен. Ссылка: " .. installerUrl, 7, true)
+                                warn("[Sirius MCP] Installer URL: " .. installerUrl)
+                            end
+                        end, true)
+                    end
+                end)
+            end)
+        end
+
+        if riskAccepted and not _G.SiriusInstallerLinkButton then
+            _G.SiriusInstallerLinkButton = true
+            UtilTab:Button("Скопировать ссылку на установщик MCP сервера", function()
+                local installerUrl = "https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstaller.exe"
+                local copied = false
+                if type(setclipboard) == "function" then
+                    copied = pcall(setclipboard, installerUrl)
+                elseif type(toclipboard) == "function" then
+                    copied = pcall(toclipboard, installerUrl)
+                end
+                if copied then
+                    Notify("Sirius MCP", "Ссылка на установщик скопирована.", 4, true)
+                else
+                    Notify("Sirius MCP", "Буфер обмена недоступен. Ссылка: " .. installerUrl, 7, true)
+                end
+            end, true)
+        end
+
+        -- Keep the start/stop control directly under the cloud section header.
+        local mcpControlButton
+        local function updateMCPButton()
+            if mcpControlButton then
+                mcpControlButton.Text = mcpRunning and "■  Остановить MCP" or "▶  Запустить MCP"
+            end
+        end
+
+        mcpControlButton = UtilTab:Button("▶  Запустить MCP", function()
+            print("[Sirius MCP] Control button clicked. Running=" .. tostring(mcpRunning))
+            if mcpRunning then
+                mcpRunning = false
+                mcpStarted = false
+                mcpGeneration = mcpGeneration + 1
+                wasOnline = false
+                updateMCPButton()
+                Notify("Sirius MCP", "Облачное подключение остановлено.", 4, true)
+                print("[Sirius MCP] Stopped by user")
+                return
+            end
+
+            if riskAccepted then
+                if startMCP then
+                    startMCP()
+                else
+                    warn("[Sirius MCP] startMCP is not initialized.")
+                    Notify("Sirius MCP", "Не удалось запустить: функция запуска не готова.", 5, true)
+                end
+            else
+                showMCPWarning()
+            end
+        end, true)
+        if not mcpControlButton then
+            warn("[Sirius MCP] UtilTab:Button did not return a button instance.")
+        end
         UtilTab:Button("Проверить соединение с Render", function()
             local ok, response = pcall(mcpRequest, "/health", "GET")
             if ok and response and response.ok == true then
@@ -8325,10 +8742,58 @@ do
                 Notify("Sirius MCP · Ошибка", tostring(response):sub(1, 140), 5, true)
             end
         end, true)
+        UtilTab:Section("Подключение к MCP-клиентам")
+        UtilTab:Button("Скопировать конфиг для Visual Studio Code", function()
+            local config = {
+                inputs = {{
+                    type = "promptString",
+                    id = "sirius-device-token",
+                    description = "Sirius Loader device token (из Sirius_MCP_Token.txt)",
+                    password = true,
+                }},
+                servers = {
+                    ["sirius-loader"] = {
+                        type = "http",
+                        url = "https://sirius-mcp.onrender.com/mcp",
+                        headers = { ["X-Sirius-Token"] = "${input:sirius-device-token}" },
+                    },
+                },
+            }
+            local encoded = HttpService:JSONEncode(config)
+            local clipboard = setclipboard or toclipboard
+            if type(clipboard) == "function" then
+                local copied = pcall(clipboard, encoded)
+                if copied then
+                    Notify("Sirius MCP", "Конфиг скопирован. Вставь его в .vscode/mcp.json и запусти сервер.", 6, true)
+                else
+                    Notify("Sirius MCP", "Буфер обмена недоступен. Инструкция есть в MCP/README.md.", 6, true)
+                end
+            else
+                Notify("Sirius MCP", "Нет API буфера обмена. Открой MCP/README.md и настрой вручную.", 6, true)
+            end
+        end, true)
+        UtilTab:Button("Скопировать MCP URL", function()
+            local clipboard = setclipboard or toclipboard
+            if type(clipboard) == "function" and pcall(clipboard, "https://sirius-mcp.onrender.com/mcp") then
+                Notify("Sirius MCP", "URL скопирован. Транспорт: Streamable HTTP.", 4, true)
+            else
+                Notify("Sirius MCP", "URL: https://sirius-mcp.onrender.com/mcp", 6, true)
+            end
+        end, true)
+        UtilTab:Label("VS Code: создай .vscode/mcp.json в папке проекта, вставь конфиг и нажми Start. Токен VS Code запросит отдельно.")
+        UtilTab:Label("Другие клиенты: укажи этот URL, транспорт Streamable HTTP и заголовок X-Sirius-Token. Значение бери из Sirius_MCP_Token.txt. Не публикуй токен.")
+        UtilTab:Label("Если копирование недоступно, полная инструкция и пример конфигурации находятся в MCP/README.md.")
         UtilTab:Label("Удалённое выполнение Lua всегда требует отдельного подтверждения на этом устройстве.")
 
-        task.spawn(function()
-            while mcpRunning and ScreenGui.Parent do
+        startMCP = function()
+            if mcpStarted or mcpRunning then return end
+            mcpRunning = true
+            mcpStarted = true
+            mcpGeneration = mcpGeneration + 1
+            local thisGeneration = mcpGeneration
+            updateMCPButton()
+            task.spawn(function()
+            while mcpRunning and thisGeneration == mcpGeneration and ScreenGui.Parent do
                 local ok, packet = pcall(mcpRequest, "/poll", "GET")
                 if ok then
                     if not wasOnline then
@@ -8404,13 +8869,25 @@ do
                 end
                 task.wait(1)
             end
-        end)
-        table.insert(Cleanups, function() mcpRunning = false end)
-        Notify("Sirius MCP", "Облачный мост активен", 3)
+            if thisGeneration == mcpGeneration then
+                mcpRunning = false
+                mcpStarted = false
+                updateMCPButton()
+            end
+            end)
+            table.insert(Cleanups, function()
+                mcpRunning = false
+                mcpStarted = false
+                mcpGeneration = mcpGeneration + 1
+                updateMCPButton()
+            end)
+            Notify("Sirius MCP", "Облачный мост активен", 3)
+            print("[Sirius MCP] Polling loop started")
+        end
     else
-        warn("[Sirius MCP] Нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
+        warn("[Sirius MCP] Нужны HTTP request API, readfile/writefile. При первом запуске устройство регистрируется автоматически.")
     end
-endend
+end
 
 SelectTab("Главная")
 
