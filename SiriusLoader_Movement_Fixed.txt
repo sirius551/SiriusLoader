@@ -478,8 +478,10 @@ local function ClampFrameToScreen(frame)
 
     if math.abs(left - pos.X) > 0.5 or math.abs(top - pos.Y) > 0.5 then
         local parent = frame.Parent
-        local parentPos = parent.AbsolutePosition
-        local parentSize = parent.AbsoluteSize
+        local parentPos, parentSize = Vector2.zero, vp
+        if parent:IsA("GuiObject") then
+            parentPos, parentSize = parent.AbsolutePosition, parent.AbsoluteSize
+        end
         local uiScale = frame:IsDescendantOf(MainFrame) and math.max(MainScale.Scale, 0.05) or 1
         local p = frame.Position
         local anchorX = size.X * frame.AnchorPoint.X
@@ -523,8 +525,10 @@ local function MakeDraggable(handle, target)
         top = math.clamp(top, minY, maxY)
 
         local parent = target.Parent
-        local parentPos = parent.AbsolutePosition
-        local parentSize = parent.AbsoluteSize
+        local parentPos, parentSize = Vector2.zero, vp
+        if parent:IsA("GuiObject") then
+            parentPos, parentSize = parent.AbsolutePosition, parent.AbsoluteSize
+        end
         local p = target.Position
         local offsetX = (left + size.X * target.AnchorPoint.X - parentPos.X - parentSize.X * p.X.Scale) / scale
         local offsetY = (top + size.Y * target.AnchorPoint.Y - parentPos.Y - parentSize.Y * p.Y.Scale) / scale
