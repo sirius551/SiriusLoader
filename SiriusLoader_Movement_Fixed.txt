@@ -457,86 +457,88 @@ end
 local CloseBtn = TopButton("×", -34, Color3.fromRGB(170, 50, 55))
 local MinBtn = TopButton("–", -64)
 
--- Перетаскивание (мышь + тач)
--- Отступ сверху — шторка уведомлений на мобиле занимает ~50-80px
--- Даём 60px запаса чтобы TopBar всегда был доступен для перетаскивания
+-- Перетаскивание: координаты всегда считаются в пикселях экрана.
+-- Окно остаётся целиком видимым, а верхняя панель не уходит под системную шторку.
 local SAFE_TOP    = 60
-local SAFE_BOTTOM = 20
-local SAFE_SIDE   = 20   -- минимально видимая часть с каждой стороны
+local SAFE_BOTTOM = 12
+local SAFE_SIDE   = 8
 
 local function ClampFrameToScreen(frame)
-    local vp     = workspace.CurrentCamera.ViewportSize
-    local scale  = math.max(MainScale.Scale, 0.1)
-    local w      = frame.AbsoluteSize.X  -- реальный размер с учётом масштаба
-    local h      = frame.AbsoluteSize.Y
+    local camera = workspace.CurrentCamera
+    if not camera or not frame or not frame.Parent then return end
 
-    -- Текущая позиция в пикселях (AbsolutePosition = верхний левый угол)
-    local ax = frame.AbsolutePosition.X
-    local ay = frame.AbsolutePosition.Y
+    local vp = camera.ViewportSize
+    local size = frame.AbsoluteSize
+    local pos = frame.AbsolutePosition
+    local minX, minY = SAFE_SIDE, SAFE_TOP
+    local maxX = math.max(minX, vp.X - size.X - SAFE_SIDE)
+    local maxY = math.max(minY, vp.Y - size.Y - SAFE_BOTTOM)
+    local left = math.clamp(pos.X, minX, maxX)
+    local top = math.clamp(pos.Y, minY, maxY)
 
-    -- Ограничения в пикселях
-    -- Правый/нижний: хотя бы SAFE_SIDE px окна должны быть видны
-    local minX = SAFE_SIDE - w + (w * 0.1)   -- оставляем 10% ширины видимой слева
-    local maxX = vp.X - SAFE_SIDE
-    local minY = SAFE_TOP
-    local maxY = vp.Y - SAFE_BOTTOM - (h * 0.08)  -- хотя бы TopBar виден снизу
-
-    local clampedX = math.clamp(ax, minX, maxX)
-    local clampedY = math.clamp(ay, minY, maxY)
-
-    if clampedX ~= ax or clampedY ~= ay then
-        -- Пересчитываем обратно в Scale+Offset
-        -- AnchorPoint = (0.5, 0.5), поэтому центр = AbsolutePosition + size/2
-        local cx = clampedX + w / 2
-        local cy = clampedY + h / 2
-        -- Scale часть позиции (0.5, 0.5) → offset = пиксели от центра экрана
-        local offX = cx - vp.X * frame.AnchorPoint.X
-        local offY = cy - vp.Y * frame.AnchorPoint.Y
-        frame.Position = UDim2.new(
-            frame.AnchorPoint.X, offX,
-            frame.AnchorPoint.Y, offY
-        )
+    if math.abs(left - pos.X) > 0.5 or math.abs(top - pos.Y) > 0.5 then
+        local parent = frame.Parent
+        local parentPos = parent.AbsolutePosition
+        local parentSize = parent.AbsoluteSize
+        local uiScale = frame:IsDescendantOf(MainFrame) and math.max(MainScale.Scale, 0.05) or 1
+        local p = frame.Position
+        local anchorX = size.X * frame.AnchorPoint.X
+        local anchorY = size.Y * frame.AnchorPoint.Y
+        local offsetX = (left + anchorX - parentPos.X - parentSize.X * p.X.Scale) / uiScale
+        local offsetY = (top + anchorY - parentPos.Y - parentSize.Y * p.Y.Scale) / uiScale
+        frame.Position = UDim2.new(p.X.Scale, offsetX, p.Y.Scale, offsetY)
     end
 end
 
 local function MakeDraggable(handle, target)
-    local dragging, dragStart, startPos
-    handle.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            dragging, dragStart, startPos = true, i.Position, target.Position
-            i.Changed:Connect(function()
-                if i.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    -- Клампим при отпускании — окно не застревает за краем
-                    task.defer(function() ClampFrameToScreen(target) end)
-                end
-            end)
+    local dragging, dragInput, dragStart, startAbsolute
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragInput = input
+            dragStart = input.Position
+            startAbsolute = target.AbsolutePosition
         end
     end)
-    Add(UIS.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-            local d = (i.Position - dragStart) / math.max(MainScale.Scale, 0.1)
-            local newX = startPos.X.Offset + d.X
-            local newY = startPos.Y.Offset + d.Y
 
-            -- Клампим прямо во время перетаскивания
-            local vp = workspace.CurrentCamera.ViewportSize
-            local w  = target.AbsoluteSize.X
-            local h  = target.AbsoluteSize.Y
-            -- Позиция центра (AnchorPoint = 0.5, 0.5)
-            local cx = vp.X * 0.5 + newX
-            local cy = vp.Y * 0.5 + newY
-            -- Верхний левый угол
-            local ax = cx - w / 2
-            local ay = cy - h / 2
-            -- Клампим
-            ax = math.clamp(ax, SAFE_SIDE - w * 0.9, vp.X - SAFE_SIDE)
-            ay = math.clamp(ay, SAFE_TOP,              vp.Y - SAFE_BOTTOM - h * 0.08)
-            -- Обратно в offset от центра
-            newX = (ax + w / 2) - vp.X * 0.5
-            newY = (ay + h / 2) - vp.Y * 0.5
+    Add(UIS.InputChanged:Connect(function(input)
+        if not dragging then return end
+        local isMouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
+        local isTouchMove = input.UserInputType == Enum.UserInputType.Touch
+        if not isMouseMove and not isTouchMove then return end
 
-            target.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+        local scale = target:IsDescendantOf(MainFrame) and math.max(MainScale.Scale, 0.05) or 1
+        local delta = (input.Position - dragStart) / scale
+        local vp = camera.ViewportSize
+        local size = target.AbsoluteSize
+        local left = startAbsolute.X + delta.X
+        local top = startAbsolute.Y + delta.Y
+        local minX, minY = SAFE_SIDE, SAFE_TOP
+        local maxX = math.max(minX, vp.X - size.X - SAFE_SIDE)
+        local maxY = math.max(minY, vp.Y - size.Y - SAFE_BOTTOM)
+        left = math.clamp(left, minX, maxX)
+        top = math.clamp(top, minY, maxY)
+
+        local parent = target.Parent
+        local parentPos = parent.AbsolutePosition
+        local parentSize = parent.AbsoluteSize
+        local p = target.Position
+        local offsetX = (left + size.X * target.AnchorPoint.X - parentPos.X - parentSize.X * p.X.Scale) / scale
+        local offsetY = (top + size.Y * target.AnchorPoint.Y - parentPos.Y - parentSize.Y * p.Y.Scale) / scale
+        target.Position = UDim2.new(p.X.Scale, offsetX, p.Y.Scale, offsetY)
+    end))
+
+    Add(UIS.InputEnded:Connect(function(input)
+        if not dragging then return end
+        if input == dragInput
+        or input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            dragInput, dragStart, startAbsolute = nil, nil, nil
+            task.defer(function() ClampFrameToScreen(target) end)
         end
     end))
 end
@@ -1197,13 +1199,27 @@ local function SetVisible(v)
     uiVisible = v
     if v then
         MainFrame.Visible = true
-        Tween(MainFrame, 0.3, {
+        MainScale.Scale = math.min(Config.Scale, 0.92)
+        Tween(MainFrame, 0.34, {
             Size = UDim2.new(0, frameWidth, 0, minimized and 38 or frameHeight),
             BackgroundTransparency = Config.Transparency,
-        }, Enum.EasingStyle.Back)
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+        Tween(MainScale, 0.34, {Scale = Config.Scale}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        task.delay(0.36, function()
+            if uiVisible and MainFrame.Parent then ClampFrameToScreen(MainFrame) end
+        end)
     else
-        Tween(MainFrame, 0.2, {Size = UDim2.new(0, frameWidth, 0, 0), BackgroundTransparency = 1})
-        task.delay(0.22, function() if not uiVisible then MainFrame.Visible = false end end)
+        Tween(MainFrame, 0.2, {
+            Size = UDim2.new(0, frameWidth, 0, 0),
+            BackgroundTransparency = 1,
+        }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        Tween(MainScale, 0.2, {Scale = math.max(Config.Scale * 0.94, 0.05)}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        task.delay(0.22, function()
+            if not uiVisible then
+                MainFrame.Visible = false
+                MainScale.Scale = Config.Scale
+            end
+        end)
     end
 end
 
@@ -1235,14 +1251,22 @@ FloatBtn.Visible = true
 
 -- Горячая клавиша
 Add(UIS.InputBegan:Connect(function(input, gpe)
-    if Listening then return end
-    if gpe or UIS:GetFocusedTextBox() then return end
+    if Listening or UIS:GetFocusedTextBox() then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     local kn = input.KeyCode.Name
+
+    -- Клавиша меню обрабатывается до проверки gpe, иначе Roblox может перехватить её.
     if kn == Config.ToggleKey then
-        if ScreenshotMode then ScreenshotMode = false ScreenGui.Enabled = true else SetVisible(not uiVisible) end
+        if ScreenshotMode then
+            ScreenshotMode = false
+            ScreenGui.Enabled = true
+        else
+            SetVisible(not uiVisible)
+        end
         return
     end
+
+    if gpe then return end
     for id, key in pairs(Config.Binds) do
         if key == kn and Actions[id] then task.spawn(Actions[id]) end
     end
@@ -2055,101 +2079,107 @@ local function bhRefreshLabel()
 end
 RageTab:Toggle("Bunnyhop (держи Space)", false, function(on)
     if bh.conn then bh.conn:Disconnect() bh.conn = nil end
+    if bh.respawnConn then bh.respawnConn:Disconnect() bh.respawnConn = nil end
     bh.cur = bh.base
     bhRefreshLabel()
     if not on then return end
 
-    -- Используем HumanoidStateType вместо FloorMaterial:
-    -- StateType не мигает на мобиле, обновляется движком один раз за событие.
     local h0 = GetHum()
-    if not h0 then return end
-
-    local inAir        = false   -- true когда Humanoid реально в прыжке/падении
-    local groundedTime = 0       -- сколько секунд стоим с момента приземления
-    local jumpCredited = false   -- засчитан ли прыжок в текущем отрыве
-    local uiTimer      = 0
-    local stateConns   = {}      -- соединения StateChanged
-
-    local function setupStateWatcher(h)
-        for _, c in ipairs(stateConns) do pcall(function() c:Disconnect() end) end
-        table.clear(stateConns)
-
-        -- Переходы В воздух
-        table.insert(stateConns, h.StateChanged:Connect(function(_, new)
-            if new == Enum.HumanoidStateType.Jumping
-            or new == Enum.HumanoidStateType.Freefall then
-                inAir        = true
-                groundedTime = 0
-                jumpCredited = false
-            elseif new == Enum.HumanoidStateType.Landed
-                or new == Enum.HumanoidStateType.Running
-                or new == Enum.HumanoidStateType.RunningNoPhysics then
-                inAir        = false
-                groundedTime = 0
-                jumpCredited = false
-            end
-        end))
+    if not h0 then
+        Notify("Bunnyhop", "Персонаж ещё не загружен", 2)
+        return
     end
 
-    setupStateWatcher(h0)
+    local lastHumanoid = h0
+    local wasAirborne = false
+    local jumpCredited = false
+    local groundedTime = 0
+    local uiTimer = 0
 
-    -- Следим за респавном: новый Humanoid = новые StateChanged соединения
-    local respawnConn = LocalPlayer.CharacterAdded:Connect(function(char)
-        local h = char:WaitForChild("Humanoid", 5)
-        if h then setupStateWatcher(h) end
-        inAir = false groundedTime = 0 jumpCredited = false
+    local respawnConn = LocalPlayer.CharacterAdded:Connect(function()
+        wasAirborne = false
+        jumpCredited = false
+        groundedTime = 0
         bh.cur = bh.base
+        bhRefreshLabel()
     end)
 
     bh.conn = RunService.Heartbeat:Connect(function(dt)
         local h, r = GetHum(), GetRoot()
         if not (h and r) or h.Health <= 0 then return end
 
+        if h ~= lastHumanoid then
+            lastHumanoid = h
+            wasAirborne = false
+            jumpCredited = false
+            groundedTime = 0
+            bh.cur = bh.base
+        end
+
         local holding = (UIS:IsKeyDown(Enum.KeyCode.Space) and not UIS:GetFocusedTextBox()) or h.Jump
-        local md      = h.MoveDirection
+        local state = h:GetState()
+        local airborne = state == Enum.HumanoidStateType.Jumping
+            or state == Enum.HumanoidStateType.Freefall
+            or state == Enum.HumanoidStateType.FallingDown
 
-        if not inAir then
-            -- На земле
-            groundedTime += dt
-
-            if bh.forceJump and holding then
-                h:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-
-            -- Сброс: отпустил Space или не успел прыгнуть за grace
-            if not holding or groundedTime > bh.grace then
-                bh.cur = bh.base
-            end
-        else
-            -- В воздухе: засчитываем прыжок ровно один раз
-            if not jumpCredited then
-                jumpCredited = true
-                if holding then
-                    if bh.progressive then
-                        bh.cur = math.min(bh.limit, bh.cur + bh.step)
+        if airborne then
+            groundedTime = 0
+            if not wasAirborne then
+                wasAirborne = true
+                if not jumpCredited then
+                    jumpCredited = true
+                    if holding then
+                        if bh.progressive then
+                            bh.cur = math.min(bh.limit, bh.cur + bh.step)
+                        else
+                            bh.cur = bh.fixed
+                        end
                     else
-                        bh.cur = bh.fixed
+                        bh.cur = bh.base
                     end
-                else
-                    bh.cur = bh.base
                 end
             end
 
-            -- Применяем горизонтальную скорость
-            if bh.cur > bh.base and md.Magnitude > 0 then
-                local v      = r.AssemblyLinearVelocity
-                local horiz  = Vector3.new(v.X, 0, v.Z)
-                local target = md.Unit * bh.cur
-                local nv     = bh.strafe and horiz:Lerp(target, 0.15) or target
-                r.AssemblyLinearVelocity = Vector3.new(nv.X, v.Y, nv.Z)
+            -- Применяем целевую скорость к физической скорости персонажа.
+            local move = h.MoveDirection
+            local velocity = r.AssemblyLinearVelocity
+            local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+            local direction
+            if move.Magnitude > 0.05 then
+                direction = move.Unit
+            elseif horizontal.Magnitude > 0.05 then
+                direction = horizontal.Unit
+            end
+
+            if direction and bh.cur > bh.base then
+                local targetVelocity = direction * bh.cur
+                local alpha = math.clamp(dt * 12, 0, 1)
+                local nextVelocity = horizontal:Lerp(targetVelocity, alpha)
+                r.AssemblyLinearVelocity = Vector3.new(nextVelocity.X, velocity.Y, nextVelocity.Z)
+            end
+        else
+            if wasAirborne then
+                wasAirborne = false
+                jumpCredited = false
+                groundedTime = 0
+            end
+
+            groundedTime += dt
+            if bh.forceJump and holding then
+                h:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+            if not holding or groundedTime > bh.grace then
+                bh.cur = bh.base
             end
         end
 
         uiTimer += dt
-        if uiTimer > 0.1 then uiTimer = 0 bhRefreshLabel() end
+        if uiTimer >= 0.1 then
+            uiTimer = 0
+            bhRefreshLabel()
+        end
     end)
 
-    -- Сохраняем respawnConn чтобы отключить при выключении бхопа
     bh.respawnConn = respawnConn
 end)
 OnUnload(function()
@@ -3001,6 +3031,10 @@ OnUnload(function()
     if rainSound then rainSound:Destroy() end
 end)
 
+local function VisualText(ru, en)
+    return Config.Language == "en" and en or ru
+end
+
 VisualsTab:Section("ESP (встроенный)")
 local esp = {on = false, objs = {}}
 local function espClear()
@@ -3386,15 +3420,15 @@ if LocalPlayer.Character then task.spawn(VFXBindCharacter, LocalPlayer.Character
 table.insert(VFXConns, LocalPlayer.CharacterAdded:Connect(VFXBindCharacter))
 
 -- 01–08: player overlay visuals
-VisualsTab:Section("Player overlays · Tracers / ESP")
-VisualsTab:Toggle("01 · Tracers", false, function(v) VFX.Tracers = v end)
-VisualsTab:Toggle("02 · 2D Boxes", false, function(v) VFX.Boxes = v end)
-VisualsTab:Toggle("03 · Head Dots", false, function(v) VFX.HeadDots = v end)
-VisualsTab:Toggle("04 · Display Names", false, function(v) VFX.Names = v end)
-VisualsTab:Toggle("05 · Health Bars", false, function(v) VFX.HealthBars = v end)
-VisualsTab:Toggle("06 · Distance Labels", false, function(v) VFX.Distances = v end)
-VisualsTab:Toggle("07 · Team Colors", false, function(v) VFX.TeamColors = v end)
-VisualsTab:Toggle("08 · Chams Highlight", false, function(v)
+VisualsTab:Section(VisualText("Игроки · Линии / ESP", "Player overlays · Tracers / ESP"))
+VisualsTab:Toggle(VisualText("01 · Линии до игроков", "01 · Tracers"), false, function(v) VFX.Tracers = v end)
+VisualsTab:Toggle(VisualText("02 · 2D рамки", "02 · 2D Boxes"), false, function(v) VFX.Boxes = v end)
+VisualsTab:Toggle(VisualText("03 · Метки над головой", "03 · Head Dots"), false, function(v) VFX.HeadDots = v end)
+VisualsTab:Toggle(VisualText("04 · Имена игроков", "04 · Display Names"), false, function(v) VFX.Names = v end)
+VisualsTab:Toggle(VisualText("05 · Полосы здоровья", "05 · Health Bars"), false, function(v) VFX.HealthBars = v end)
+VisualsTab:Toggle(VisualText("06 · Дистанция", "06 · Distance Labels"), false, function(v) VFX.Distances = v end)
+VisualsTab:Toggle(VisualText("07 · Цвета команд", "07 · Team Colors"), false, function(v) VFX.TeamColors = v end)
+VisualsTab:Toggle(VisualText("08 · Подсветка игроков", "08 · Chams Highlight"), false, function(v)
     VFX.Chams = v
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
