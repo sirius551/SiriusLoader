@@ -7347,27 +7347,43 @@ ClientTab:Toggle("24. Скрыть HP-бар и имя", false, function(on)
     end)
 end)
 
--- 25. Эффект пьяности (покачивание + размытие)
-local drunkConn, drunkBlur
-ClientTab:Toggle("25. Эффект пьяности", false, function(on)
-    if drunkConn then drunkConn:Disconnect() drunkConn = nil end
+-- 25. Эффект пьяности (мягкое покачивание + лёгкое размытие)
+local drunkBlur
+local drunkStepName = "SiriusLoader_DrunkEffect"
+local drunkBound = false
+
+local function StopDrunkEffect()
+    if drunkBound then
+        pcall(function() RunService:UnbindFromRenderStep(drunkStepName) end)
+        drunkBound = false
+    end
     if drunkBlur then drunkBlur:Destroy() drunkBlur = nil end
+end
+
+ClientTab:Toggle("25. Эффект пьяности", false, function(on)
+    StopDrunkEffect()
     if not on then return end
-    drunkBlur = New("BlurEffect", {Size=3, Name="SL_Drunk"}, Lighting)
+
+    drunkBlur = New("BlurEffect", {Size=1, Name="SL_Drunk"}, Lighting)
     local t = 0
-    drunkConn = RunService.RenderStepped:Connect(function(dt)
+    RunService:BindToRenderStep(drunkStepName, Enum.RenderPriority.Camera.Value + 1, function(dt)
         t += dt
         local cam = workspace.CurrentCamera
-        cam.CFrame = cam.CFrame * CFrame.Angles(
-            math.sin(t*1.1)*0.03, math.sin(t*0.7)*0.04, math.sin(t*1.9)*0.02
+        if not cam then return end
+
+        local offset = CFrame.Angles(
+            math.sin(t * 0.55) * 0.006,
+            math.sin(t * 0.35) * 0.004,
+            math.sin(t * 0.8) * 0.008
         )
-        drunkBlur.Size = 3 + math.sin(t*0.5)*2
+        cam.CFrame = cam.CFrame * offset
+        if drunkBlur then
+            drunkBlur.Size = 1 + (math.sin(t * 0.35) + 1) * 0.75
+        end
     end)
+    drunkBound = true
 end)
-OnUnload(function()
-    if drunkConn then drunkConn:Disconnect() end
-    if drunkBlur then drunkBlur:Destroy() end
-end)
+OnUnload(StopDrunkEffect)
 
 -- 26. Инверсия цветов
 local invertCC
