@@ -2905,28 +2905,73 @@ end)
 
 RageTab:Section("Авто-парри / Авто-блок")
 local parryConn
-RageTab:Toggle("Авто-блок (нажимает E при получении урона)", false, function(on)
+local parryKey = Enum.KeyCode.E
+local parryKeyNames = {
+    "E","F","Q","R","T","G","H","X","C","V","Z",
+    "One","Two","Three","Four","Five",
+    "MouseButton1","MouseButton2",
+}
+local parryKeyLabels = {
+    One = "1", Two = "2", Three = "3", Four = "4", Five = "5",
+    MouseButton1 = "ЛКМ", MouseButton2 = "ПКМ",
+}
+local function parryKeyLabel(name)
+    return parryKeyLabels[name] or name
+end
+local parryKeyIndex = 1
+local function updateParryKeyButton()
+    local name = parryKey.Name
+    parryKeyBtn.Text = "Клавиша авто-блока: " .. parryKeyLabel(name) .. " (нажми для смены)"
+end
+local parryKeyBtn
+parryKeyBtn = RageTab:Button("Клавиша авто-блока: E (нажми для смены)", function()
+    parryKeyIndex = parryKeyIndex % #parryKeyNames + 1
+    local name = parryKeyNames[parryKeyIndex]
+    parryKey = name == "MouseButton1" and Enum.KeyCode.Unknown
+        or name == "MouseButton2" and Enum.KeyCode.Unknown
+        or Enum.KeyCode[name]
+    if name == "MouseButton1" or name == "MouseButton2" then
+        parryKey = name
+    end
+    updateParryKeyButton()
+end, true)
+local function triggerParryInput()
+    local key = parryKey
+    if typeof(key) == "EnumItem" then
+        if key == Enum.KeyCode.Unknown then return end
+        pcall(function()
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            vim:SendKeyEvent(false, key, false, game)
+        end)
+    elseif key == "MouseButton1" or key == "MouseButton2" then
+        pcall(function()
+            local vim = game:GetService("VirtualInputManager")
+            local button = key == "MouseButton1" and 0 or 1
+            local position = UIS:GetMouseLocation()
+            vim:SendMouseButtonEvent(position.X, position.Y, button, true, game, 0)
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(position.X, position.Y, button, false, game, 0)
+        end)
+    end
+end
+RageTab:Toggle("Авто-блок (нажимает выбранную клавишу при получении урона)", false, function(on)
     if parryConn then parryConn:Disconnect() parryConn = nil end
     if not on then return end
     local h = GetHum()
     if not h then return end
+    local lastHP = h.Health
     parryConn = h.HealthChanged:Connect(function(newHP)
-        if newHP < h.MaxHealth then
-            local fakeInput = Instance.new("InputObject")
-            fakeInput.KeyCode = Enum.KeyCode.E
-            fakeInput.UserInputType = Enum.UserInputType.Keyboard
-            pcall(function() UIS:FindFirstChild("InputChanged") end)
-            pcall(function()
-                local vu = game:GetService("VirtualUser")
-                vu:CaptureController()
-                vu:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                task.wait(0.05)
-                vu:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            end)
+        if newHP < lastHP then
+            lastHP = newHP
+            triggerParryInput()
+        else
+            lastHP = newHP
         end
     end)
 end)
-OnUnload(function() if parryConn then parryConn:Disconnect() end end)
+OnUnload(function() if parryConn then parryConn:Disconnect() parryConn = nil end end)
 
 RageTab:Section("Aimbot Prediction+")
 local predShoot = {on=false, conn=nil, delay=0.08}
