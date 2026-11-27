@@ -2839,69 +2839,106 @@ end)
 OnUnload(function() if camlock.conn then camlock.conn:Disconnect() end end)
 RageTab:Slider("Плавность Camlock", 0, 0.9, 0.15, function(v) camlock.smooth = v end, 2)
 
-RageTab:Section("Телепорт под землю")
-RageTab:Button("Один шаг вниз (-4 studs)", function()
-    local r = GetRoot() if r then r.CFrame = r.CFrame + Vector3.new(0,-4,0) end
+RageTab:Section(VisualText("Телепорт под землю", "Underground teleport"))
+RageTab:Button(VisualText("Один шаг вниз (-4 studs)", "Single step down (-4 studs)"), function()
+    local r = GetRoot()
+    if r then r.CFrame = r.CFrame + Vector3.new(0, -4, 0) end
 end)
-local groundConn
-RageTab:Toggle("Непрерывный Underground TP", false, function(on)
-    if groundConn then groundConn:Disconnect() groundConn = nil end
 
-    local function setCharCollide(state)
-        local c = GetChar()
-        if not c then return end
-        for _, p in ipairs(c:GetDescendants()) do
-            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-                pcall(function() p.CanCollide = state end)
+-- Preserve the original collision state instead of forcing every body part
+-- to CanCollide=true when this feature is disabled.
+local groundConn
+local groundCharacterConn
+local groundDescendantConn
+local groundSaved = {}
+local groundCharacter = nil
+local groundEnabled = false
+
+local function restoreGroundCollisions()
+    for part, wasCollidable in pairs(groundSaved) do
+        if part and part.Parent then
+            pcall(function() part.CanCollide = wasCollidable end)
+        end
+    end
+    table.clear(groundSaved)
+end
+
+local function setGroundCharacter(char, disabled)
+    if not char then return end
+    if groundDescendantConn then
+        groundDescendantConn:Disconnect()
+        groundDescendantConn = nil
+    end
+
+    if groundCharacter and groundCharacter ~= char then
+        restoreGroundCollisions()
+    end
+    groundCharacter = char
+
+    local function trackPart(part)
+        if not part:IsA("BasePart") or part.Name == "HumanoidRootPart" then return end
+        if disabled then
+            if groundSaved[part] == nil then
+                groundSaved[part] = part.CanCollide
             end
+            part.CanCollide = false
+        elseif groundSaved[part] ~= nil then
+            part.CanCollide = groundSaved[part]
+            groundSaved[part] = nil
         end
     end
 
-    if not on then
-        setCharCollide(true)   -- восстанавливаем коллизии при выключении
-        return
+    for _, descendant in ipairs(char:GetDescendants()) do
+        trackPart(descendant)
+    end
+    if disabled then
+        groundDescendantConn = char.DescendantAdded:Connect(trackPart)
+    end
+end
+
+local function stopGroundTP()
+    groundEnabled = false
+    if groundConn then groundConn:Disconnect() groundConn = nil end
+    if groundCharacterConn then groundCharacterConn:Disconnect() groundCharacterConn = nil end
+    if groundDescendantConn then groundDescendantConn:Disconnect() groundDescendantConn = nil end
+    restoreGroundCollisions()
+    groundCharacter = nil
+end
+
+RageTab:Toggle(VisualText("Непрерывный Underground TP", "Continuous underground teleport"), false, function(on)
+    stopGroundTP()
+    if not on then return end
+
+    groundEnabled = true
+    local currentCharacter = GetChar()
+    if currentCharacter then
+        setGroundCharacter(currentCharacter, true)
     end
 
-    -- Шаг 1: выключаем коллизии чтобы пол не выталкивал обратно
-    setCharCollide(false)
-
-    -- Шаг 2: в каждом кадре толкаем вниз через Velocity — движок не может
-    -- телепортировать нас обратно пока CanCollide = false
-    local accumulator = 0
-    groundConn = RunService.Heartbeat:Connect(function(dt)
-        local r = GetRoot()
-        local h = GetHum()
-        if not r or not h then return end
-
-        -- Убеждаемся что коллизии выключены (персонаж мог респавниться)
-        setCharCollide(false)
-
-        -- Принудительно двигаем вниз, обходя физику
-        r.AssemblyLinearVelocity = Vector3.new(
-            r.AssemblyLinearVelocity.X,
-            -80,   -- постоянная скорость вниз
-            r.AssemblyLinearVelocity.Z
-        )
-
-        -- Дополнительно: каждые 0.1с телепортируем на -3 studs как страховка
-        accumulator += dt
-        if accumulator >= 0.1 then
-            accumulator = 0
-            local cf = r.CFrame
-            r.CFrame = cf - Vector3.new(0, 3, 0)
+    groundCharacterConn = LocalPlayer.CharacterAdded:Connect(function(char)
+        if groundEnabled then
+            setGroundCharacter(char, true)
         end
     end)
-end)
-OnUnload(function()
-    if groundConn then groundConn:Disconnect() groundConn = nil end
-    -- Восстанавливаем коллизии при выгрузке
-    local c = GetChar()
-    if c then
-        for _, p in ipairs(c:GetDescendants()) do
-            if p:IsA("BasePart") then pcall(function() p.CanCollide = true end) end
+
+    local offset = 4
+    groundConn = RunService.Heartbeat:Connect(function()
+        if not groundEnabled then return end
+        local root = GetRoot()
+        local humanoid = GetHum()
+        if not (root and humanoid and humanoid.Health > 0) then return end
+
+        local char = GetChar()
+        if char and char ~= groundCharacter then
+            setGroundCharacter(char, true)
         end
-    end
+
+        local targetY = root.Position.Y - offset
+        root.CFrame = CFrame.new(root.Position.X, targetY, root.Position.Z) * root.CFrame.Rotation
+    end)
 end)
+
+OnUnload(stopGroundTP)
 
 RageTab:Section("Авто-парри / Авто-блок")
 local parryConn
