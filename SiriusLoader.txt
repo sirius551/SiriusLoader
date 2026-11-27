@@ -386,10 +386,11 @@ local function ApplyFullTheme(light)
 
     -- Make light mode intentionally opaque and remove the game scene from behind controls.
     if MainFrame then
-        MainFrame.BackgroundTransparency = light and 0 or (tonumber(Config.Transparency) or 0)
+        local transparency = math.clamp(tonumber(Config.Transparency) or 0, 0, 0.85)
+        MainFrame.BackgroundTransparency = transparency
         WallpaperTint.BackgroundColor3 = light and Color3.fromRGB(242, 245, 251) or THEMES.dark.Background
-        WallpaperTint.BackgroundTransparency = light and 0 or math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
-        WallpaperImage.ImageTransparency = light and 1 or (tonumber(Config.WallpaperTransparency) or 0.15)
+        WallpaperTint.BackgroundTransparency = math.clamp(0.42 + transparency * 0.5, 0.42, 0.9)
+        WallpaperImage.ImageTransparency = light and 1 or math.clamp(tonumber(Config.WallpaperTransparency) or 0.15, 0, 0.9)
         TopBar.BackgroundTransparency = light and 0 or 0.12
         Sidebar.BackgroundTransparency = light and 0 or 0.12
         SearchBox.BackgroundTransparency = light and 0 or 0.08
@@ -8962,6 +8963,18 @@ end, true)
 end
 -- ==================== SETTINGS ====================
 do
+SettingsTab:Section("Обновления")
+SettingsTab:Button("↻  Проверить обновления GitHub", function()
+    local env = (getgenv and getgenv()) or _G
+    local checker = env and env.SiriusCheckUpdates
+    if type(checker) == "function" then
+        task.spawn(checker)
+    else
+        Notify("Sirius Update", "Проверка ещё инициализируется. Попробуй через несколько секунд.", 3, true)
+    end
+end, true)
+SettingsTab:Label("Автопроверка: при запуске и каждые 2 минуты.")
+
 SettingsTab:Section("Светлая / тёмная тема")
 SettingsTab:Toggle("☀ Светлая тема", false, function(on)
     ApplyFullTheme(on)
@@ -8970,17 +8983,6 @@ SettingsTab:Toggle("☀ Светлая тема", false, function(on)
     Notify(on and "Светлая ☀" or "Тёмная 🌙",
            on and "Светлая тема включена" or "Тёмная тема включена", 2)
 end)
-
-SettingsTab:Section("Обновления")
-SettingsTab:Button("Проверить обновления GitHub", function()
-    local checker = getgenv and getgenv().SiriusCheckUpdates
-    if type(checker) == "function" then
-        task.spawn(checker)
-    else
-        Notify("Sirius Update", "Проверка обновлений ещё запускается. Повтори через пару секунд.", 3, true)
-    end
-end, true)
-SettingsTab:Label("Автоматическая проверка выполняется при запуске и затем каждые 2 минуты.")
 
 SettingsTab:Section("Тема акцента")
 local presets = {
@@ -9008,6 +9010,7 @@ SettingsTab:Section("Внешний вид окна")
 local sT = SettingsTab:Slider("Прозрачность фона", 0, 0.85, Config.Transparency, function(v)
     Config.Transparency = v
     MainFrame.BackgroundTransparency = v
+    WallpaperTint.BackgroundColor3 = isLightTheme and Color3.fromRGB(242, 245, 251) or THEMES.dark.Background
     WallpaperTint.BackgroundTransparency = math.clamp(0.42 + v * 0.5, 0.42, 0.9)
 end, 2)
 sT.OnRelease = SaveConfig
@@ -9116,8 +9119,8 @@ SettingsTab:Button("Сбросить настройки", function()
     Config.MenuWidth, Config.MenuHeight = isMobile and 420 or 760, isMobile and 360 or 520
     frameWidth, frameHeight = Config.MenuWidth, Config.MenuHeight
     Config.WallpaperFPS, Config.WallpaperFrames, Config.WallpaperColumns = 12, 16, 4
-    MainFrame.BackgroundTransparency, MainScale.Scale = 0, 1
-    WallpaperTint.BackgroundTransparency = 0.42
+    MainFrame.BackgroundTransparency, MainScale.Scale = Config.Transparency, 1
+    WallpaperTint.BackgroundTransparency = math.clamp(0.42 + Config.Transparency * 0.5, 0.42, 0.9)
     WallpaperImage.Image = ""
     WallpaperImage.ImageTransparency = Config.WallpaperTransparency
     sT:Set(0) sS:Set(1)
@@ -9782,8 +9785,10 @@ end)
 SelectTab("Главная")
 
 MainFrame.Visible = true
-MainFrame.BackgroundTransparency = Config.Transparency
-WallpaperTint.BackgroundTransparency = math.clamp(0.42 + Config.Transparency * 0.5, 0.42, 0.9)
+MainFrame.BackgroundTransparency = math.clamp(tonumber(Config.Transparency) or 0, 0, 0.85)
+WallpaperTint.BackgroundColor3 = isLightTheme and Color3.fromRGB(242, 245, 251) or THEMES.dark.Background
+WallpaperTint.BackgroundTransparency = math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
+WallpaperImage.ImageTransparency = isLightTheme and 1 or math.clamp(tonumber(Config.WallpaperTransparency) or 0.15, 0, 0.9)
 ApplyWallpaper()
 Tween(MainFrame, 0.45, {Size = UDim2.new(0, frameWidth, 0, frameHeight), BackgroundTransparency = Config.Transparency}, Enum.EasingStyle.Back)
 Notify("SiriusLoader загружен", "Меню: " .. Config.ToggleKey .. " или ☰", 3)
