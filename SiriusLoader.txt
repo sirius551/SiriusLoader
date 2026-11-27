@@ -6248,6 +6248,7 @@ local function playEmoteByName(name)
     if not c then error("нет персонажа", 0) end
     local hum = c:FindFirstChildOfClass("Humanoid")
     if not hum then error("Humanoid не найден", 0) end
+    name = tostring(name):lower():gsub("^/e%s+", ""):gsub("^%s+", ""):gsub("%s+$", "")
     local animate = c:FindFirstChild("Animate")
     if animate then
         local playEmote = animate:FindFirstChild("PlayEmote")
@@ -6256,10 +6257,29 @@ local function playEmoteByName(name)
             if ok and result ~= false then return true end
         end
     end
-    -- В новых версиях Roblox встроенные эмоции доступны через Humanoid.
+    -- Сначала пробуем штатный механизм аватара: он работает только для доступных/экипированных эмоций.
     local ok, result = pcall(function() return hum:PlayEmote(name) end)
     if ok and result ~= false then return true end
-    error("Эта игра не предоставляет серверно-реплицируемый запуск эмоции '" .. tostring(name) .. "'. Используй доступную в игре эмоцию или разрешённый Asset ID.", 0)
+
+    -- Walk/Run берём из текущего Animate-скрипта, чтобы использовать анимации самого аватара.
+    if animate and (name == "walk" or name == "run") then
+        local folder = animate:FindFirstChild(name)
+        local animation = folder and folder:FindFirstChildWhichIsA("Animation", true)
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animation and animator then
+            stopCurrentEmote()
+            local track = animator:LoadAnimation(animation)
+            track.Priority = Enum.AnimationPriority.Action
+            track:Play(0.15)
+            emotePlaying = track
+            return true
+        end
+    elseif name == "sit" then
+        stopCurrentEmote()
+        hum.Sit = true
+        return true
+    end
+    error("Эмоция '" .. name .. "' недоступна в этой игре/аватаре. Roblox не поддерживает произвольные /e-названия; для неё нужен доступный Asset ID анимации.", 0)
 end
 
 -- Кнопка стоп
