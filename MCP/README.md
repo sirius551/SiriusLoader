@@ -171,3 +171,180 @@ https://<адрес-сервера>/mcp
 **Sirius Loader MCP** — инструмент интеграции Sirius Loader с MCP-совместимыми AI-ассистентами.
 
 Исходный код и обновления: [GitHub — sirius551/asdfjkafdkgjaj](https://github.com/sirius551/asdfjkafdkgjaj)
+
+
+---
+
+# Sirius Loader MCP (English)
+
+Connect **Sirius Loader** to an MCP-compatible AI assistant and control the Loader's available features using natural language.
+
+Sirius MCP connects your running Loader to an AI assistant through a secure cloud connection. You can check the connection status, inspect and control available interface elements, and work with Lua code.
+
+> **Important:** You need a running Sirius Loader, a configured connection to the MCP server, and an MCP-compatible client.
+
+## Features
+
+- **Connection status:** Check cloud bridge availability and Loader activity.
+- **Session information:** Retrieve player, game, health, and position data reported by Loader.
+- **Interface controls:** View registered toggles, sliders, and actions.
+- **Commands:** Change toggle and slider values and run registered actions.
+- **Lua:** Prepare Lua code and request its execution with mandatory on-device confirmation.
+- **Logs:** View recent events, connections, and command results.
+
+## Windows MCP installer
+
+The `MCP` folder contains an archive with two installer versions:
+
+- **Russian version** — installer interface in Russian.
+- **English version** — installer interface in English.
+
+[Download SiriusMCPInstaller.rar](https://raw.githubusercontent.com/sirius551/asdfjkafdkgjaj/main/MCP/SiriusMCPInstaller.rar) · [View the file in the repository](https://github.com/sirius551/asdfjkafdkgjaj/blob/main/MCP/SiriusMCPInstaller.rar)
+
+Download and extract the archive, then run the installer in your preferred language. It searches common Windows folders for your personal `Sirius_MCP_Token.txt` file and also lets you select the file manually.
+
+The installer lets you choose which MCP clients to create or update configurations for. It creates backups before modifying existing files. When installation is complete, fully restart the selected applications.
+
+Supported configuration targets: Visual Studio Code, Cursor, Claude Code, Gemini CLI, Windsurf (legacy), Devin Desktop, Cline, Roo Code, and OpenAI Codex. **Claude Desktop must be configured manually** through Settings → Connectors → Add custom connector.
+
+The installer writes your personal token into the configuration files of the selected MCP clients. Protect access to your Windows account and do not share the token file or configuration files containing it.
+
+## Installation and connection
+
+### 1. Install and launch Sirius Loader
+
+Make sure you have the latest version of Sirius Loader and that it launches successfully in your environment.
+
+For cloud connectivity, your executor must support HTTP requests and local file reading (the `readfile` API).
+
+### 2. Get the server address and token
+
+You need two values to connect:
+
+- **MCP server address** — the public HTTPS address of the service.
+- **Access token** — the secret key issued for your connection.
+
+If the server is provided by a developer, obtain these details from them. Do not use another user's token or publish your own.
+
+### 3. Configure Loader
+
+The following two files must be present in the executor's working directory:
+
+| File | Contents |
+|---|---|
+| `Sirius_MCP_URL.txt` | HTTPS server address |
+| `Sirius_MCP_Token.txt` | Your access token |
+
+Enter the actual service address in the URL file, for example:
+
+```text
+https://sirius-mcp.onrender.com
+```
+
+Put the issued secret in the token file. Do not add it to Lua scripts, public repositories, or messages.
+
+### 4. Connect an MCP client
+
+Add the server to your MCP client's settings using this address:
+
+```text
+https://<server-address>/mcp
+```
+
+The setup process depends on the client you use. Make sure the client supports **Streamable HTTP** and can send the access token in the `X-Sirius-Token` HTTP header.
+
+After configuration, launch Loader and check the connection. Sirius Loader also provides a **"Check connection to Render"** button under **Utility → Sirius MCP**.
+
+## Available tools
+
+After a successful connection, the AI client can use the following tools:
+
+| Tool | Description |
+|---|---|
+| `sirius_connection_status` | Check the connection state and heartbeat |
+| `sirius_get_status` | Get the latest session information |
+| `sirius_list_controls` | List available toggles, sliders, and actions |
+| `sirius_set_toggle` | Enable or disable a registered toggle |
+| `sirius_set_slider` | Change a registered slider value |
+| `sirius_run_action` | Run a registered action |
+| `sirius_create_lua_script` | Prepare Lua code for the user to save |
+| `sirius_execute_lua` | Request Lua code execution |
+| `sirius_read_recent_logs` | View recent events and logs |
+| `sirius_capture_screenshot` | Reports that screenshots are unavailable in cloud mode |
+
+To control interface elements, call `sirius_list_controls` first. Control tools require the exact element ID returned by that list.
+
+## Example requests
+
+After connecting, you can communicate with your AI assistant in natural language:
+
+- "Check whether Sirius Loader is connected."
+- "Show the available toggles and actions."
+- "Get the current game session status."
+- "Set this slider to 50."
+- "Show the latest MCP logs."
+- "Prepare a Lua script with the following code."
+
+Actual control capabilities depend on the elements registered by the current Loader version.
+
+## Lua execution
+
+The `sirius_execute_lua` tool sends a code execution request to the active executor.
+
+**Every request requires separate approval.** Before execution, Loader displays a window containing the full Lua source code. You can choose:
+
+- **"Reject"** — cancel execution.
+- **"Execute this code"** — approve execution of the displayed code.
+
+The prompt automatically rejects the request after 30 seconds. The confirmation parameter in an MCP request does not replace on-device approval.
+
+Do not approve code you have not read or do not understand. Lua code may use available executor APIs and modify the state of the game.
+
+The `sirius_create_lua_script` tool works differently: it returns prepared Lua source, but **does not save a file on the cloud server or execute the code**.
+
+## Security
+
+- Use only your own access token.
+- Send connection data only over HTTPS.
+- Do not publish your token in GitHub, chats, screenshots, or logs.
+- Do not approve unknown Lua code.
+- If your token is exposed, request its replacement and update the local `Sirius_MCP_Token.txt` file.
+- Do not share sensitive information with an AI assistant unless necessary.
+
+## Limitations
+
+- **Loader must be running.** Without a heartbeat, the cloud server cannot receive current state or execute commands.
+- **HTTP and file-reading support are required.** The executor must provide the corresponding APIs.
+- **Commands are limited to registered elements.** MCP cannot control elements that Loader has not reported to the server.
+- **The queue is temporary.** Command data and state are stored in process memory and are cleared when the service restarts.
+- **Free Render services may sleep.** The first request after an idle period may take longer.
+- **Screenshots are unavailable in cloud mode.** The cloud server cannot access your computer's screen.
+- **MCP does not grant additional game permissions.** Client-side actions do not become server-side actions just because MCP is used.
+
+## Troubleshooting
+
+**The MCP client cannot connect**
+
+Check the server address, HTTPS, Streamable HTTP support, and the access token.
+
+**Loader appears disconnected**
+
+Launch Loader, make sure the game and executor are running, and verify that the URL and token files contain the correct values.
+
+**A command does not execute**
+
+Make sure Loader is connected, the required element is registered, and its ID was retrieved using `sirius_list_controls`.
+
+**The service responds slowly after being idle**
+
+A free Render instance may enter sleep mode. Wait for the service to start and retry the request.
+
+**Lua code does not execute**
+
+Make sure you have read the displayed code and approved that exact request in the Loader confirmation window before it times out.
+
+---
+
+**Sirius Loader MCP** is an integration tool that connects Sirius Loader to MCP-compatible AI assistants.
+
+Source code and updates: [GitHub — sirius551/asdfjkafdkgjaj](https://github.com/sirius551/asdfjkafdkgjaj)
