@@ -9457,6 +9457,188 @@ do
     end
 end
 
+-- ==================== АВТООБНОВЛЕНИЕ SIRIUSLOADER ====================
+do
+    local UPDATE_API = "https://api.github.com/repos/sirius551/SiriusLoader/commits/main"
+    local UPDATE_RAW = "https://raw.githubusercontent.com/sirius551/SiriusLoader/main/SiriusLoader.txt"
+    local UPDATE_STATE_FILE = "SiriusLoader_UpdateState.json"
+    local UPDATE_PENDING_FILE = "SiriusLoader_PendingRestore.json"
+    local updateBusy, updateDialogOpen = false, false
+    local latestCommit = nil
+
+    local function getLatestCommit()
+        local raw = FetchSource(UPDATE_API)
+        if not raw then return nil end
+        local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+        if not ok or type(data) ~= "table" or type(data.sha) ~= "string" then return nil end
+        return data.sha
+    end
+
+    local function readUpdateState()
+        local ok, data = pcall(function()
+            if isfile and readfile and isfile(UPDATE_STATE_FILE) then
+                return HttpService:JSONDecode(readfile(UPDATE_STATE_FILE))
+            end
+        end)
+        return ok and type(data) == "table" and data or {}
+    end
+
+    local function saveUpdateState(sha)
+        pcall(function()
+            if writefile then writefile(UPDATE_STATE_FILE, HttpService:JSONEncode({lastSeenCommit = sha})) end
+        end)
+    end
+
+    local function showUpdateDialog(sha)
+        if updateDialogOpen or updateBusy or not ScreenGui.Parent then return end
+        updateDialogOpen = true
+        local decided = Instance.new("BindableEvent")
+        local choice = false
+        local overlay = New("Frame", {
+            Name = "SiriusUpdateOverlay", BackgroundColor3 = Color3.fromRGB(4, 6, 11),
+            BackgroundTransparency = 0.24, Size = UDim2.new(1, 0, 1, 0), ZIndex = 950,
+        }, ScreenGui)
+        local card = New("Frame", {
+            Name = "SiriusUpdateCard", AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 390, 0, 220),
+            BackgroundColor3 = Color3.fromRGB(22, 25, 36), BorderSizePixel = 0, ZIndex = 951,
+        }, overlay)
+        Round(card, 14)
+        New("UIStroke", {Color = Color3.fromRGB(238, 166, 64), Thickness = 1.5}, card)
+        New("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.new(0, 18, 0, 16),
+            Size = UDim2.new(1, -36, 0, 30), Font = Enum.Font.GothamBold,
+            Text = "⚠  ДОСТУПНО ОБНОВЛЕНИЕ SIRIUS", TextColor3 = Color3.fromRGB(255, 190, 90),
+            TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 952,
+        }, card)
+        New("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.new(0, 18, 0, 57),
+            Size = UDim2.new(1, -36, 0, 74), Font = Enum.Font.Gotham,
+            Text = "На GitHub обнаружена новая версия SiriusLoader. Обновить скрипт сейчас?\nВключённые функции будут сохранены и восстановлены после перезагрузки.",
+            TextColor3 = Color3.fromRGB(220, 224, 235), TextSize = 12,
+            TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 952,
+        }, card)
+        local function finish(value)
+            choice = value
+            if decided then decided:Fire() end
+        end
+        local no = New("TextButton", {
+            Position = UDim2.new(0, 18, 1, -58), Size = UDim2.new(0.48, -9, 0, 40),
+            BackgroundColor3 = Color3.fromRGB(65, 42, 48), Text = "НЕ ОБНОВЛЯТЬ",
+            TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+            TextSize = 11, ZIndex = 952,
+        }, card)
+        Round(no, 8)
+        no.MouseButton1Click:Connect(function() finish(false) end)
+        local yes = New("TextButton", {
+            Position = UDim2.new(0.52, 0, 1, -58), Size = UDim2.new(0.48, -18, 0, 40),
+            BackgroundColor3 = Color3.fromRGB(54, 105, 78), Text = "ОБНОВИТЬ",
+            TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold,
+            TextSize = 12, ZIndex = 952,
+        }, card)
+        Round(yes, 8)
+        yes.MouseButton1Click:Connect(function() finish(true) end)
+        task.delay(90, function()
+            if overlay.Parent then finish(false) end
+        end)
+        decided.Event:Wait()
+        pcall(function() overlay:Destroy() end)
+        pcall(function() decided:Destroy() end)
+        updateDialogOpen = false
+
+        if not choice then
+            saveUpdateState(sha)
+            Notify("Sirius Update", "Проверка отложена до следующего нового коммита.", 3, true)
+            return
+        end
+
+        if type(writefile) ~= "function" or type(readfile) ~= "function" or type(loadstring) ~= "function" then
+            Notify("Обновление", "Executor не поддерживает сохранение состояния или loadstring.", 5, true)
+            return
+        end
+
+        updateBusy = true
+        local source = FetchSource(UPDATE_RAW .. "?v=" .. tostring(os.time()))
+        if not source or #source < 1000 or source:sub(1, 1) == "<" then
+            updateBusy = false
+            Notify("Обновление", "Не удалось скачать новую версию с GitHub.", 5, true)
+            return
+        end
+
+        local snapshot = SnapshotState()
+        local saved = pcall(function()
+            writefile(UPDATE_PENDING_FILE, HttpService:JSONEncode(snapshot))
+            saveUpdateState(sha)
+        end)
+        if not saved then
+            updateBusy = false
+            Notify("Обновление", "Не удалось сохранить включённые функции.", 5, true)
+            return
+        end
+
+        local compiled, compileError = loadstring(source)
+        if type(compiled) ~= "function" then
+            updateBusy = false
+            pcall(function() delfile(UPDATE_PENDING_FILE) end)
+            Notify("Обновление", "Ошибка компиляции новой версии: " .. tostring(compileError), 5, true)
+            return
+        end
+
+        Notify("Sirius Update", "Сохраняю настройки и перезапускаю скрипт...", 2, true)
+        task.wait(0.25)
+        UnloadHub()
+        task.wait(0.15)
+        local ok, err = pcall(compiled)
+        if not ok then
+            warn("[SiriusLoader Update] " .. tostring(err))
+        end
+    end
+
+    task.spawn(function()
+        local state = readUpdateState()
+        local firstCheck = getLatestCommit()
+        if not firstCheck then
+            Notify("Sirius Update", "Не удалось проверить GitHub. Повторю проверку позже.", 4)
+        else
+            latestCommit = firstCheck
+            if type(state.lastSeenCommit) ~= "string" then
+                saveUpdateState(firstCheck)
+            elseif state.lastSeenCommit ~= firstCheck then
+                showUpdateDialog(firstCheck)
+            end
+        end
+
+        while ScreenGui.Parent do
+            task.wait(120)
+            if not ScreenGui.Parent then break end
+            local sha = getLatestCommit()
+            if sha then
+                if not latestCommit then latestCommit = sha end
+                if sha ~= latestCommit then
+                    latestCommit = sha
+                    showUpdateDialog(sha)
+                end
+            end
+        end
+    end)
+end
+
+-- Восстанавливаем состояния переключателей после автообновления.
+pcall(function()
+    if isfile and readfile and isfile("SiriusLoader_PendingRestore.json") then
+        local pending = HttpService:JSONDecode(readfile("SiriusLoader_PendingRestore.json"))
+        if type(pending) == "table" then
+            task.defer(function()
+                task.wait(0.8)
+                ApplySnapshot(pending, false)
+                pcall(function() delfile("SiriusLoader_PendingRestore.json") end)
+                Notify("Sirius Update", "Обновление завершено. Состояния функций восстановлены.", 4, true)
+            end)
+        end
+    end
+end)
+
 SelectTab("Главная")
 
 MainFrame.Visible = true
