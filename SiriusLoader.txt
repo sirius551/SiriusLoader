@@ -7218,15 +7218,67 @@ OnUnload(function()
     for part, v in pairs(physFrozen) do if part and part.Parent then part.Anchored = v end end
 end)
 
--- 18. Замедление игры (снизить FPS таргет)
-ClientTab:Slider("18. Скорость игры (0.1–1)", 1, 10, 10, function(v)
-    local spd = v / 10
-    pcall(function() game:GetService("RunService"):Set3dRenderingEnabled(spd > 0.2) end)
-    task.spawn(function()
-        while true do
-            task.wait(spd)
-        end
-    end)
+-- 18. Скорость анимаций персонажа (локальный визуальный эффект)
+local gameAnimSpeed = 1
+local gameAnimConnections = {}
+local gameAnimCharacterConnection
+
+local function ApplyGameAnimationSpeed(character)
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        pcall(function() track:AdjustSpeed(gameAnimSpeed) end)
+    end
+end
+
+local function BindGameAnimationSpeed(character)
+    for _, connection in ipairs(gameAnimConnections) do
+        if connection then connection:Disconnect() end
+    end
+    table.clear(gameAnimConnections)
+
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then humanoid = character:WaitForChild("Humanoid", 5) end
+    if not humanoid then return end
+
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then animator = humanoid:WaitForChild("Animator", 5) end
+    if not animator then return end
+
+    ApplyGameAnimationSpeed(character)
+    table.insert(gameAnimConnections, animator.AnimationPlayed:Connect(function(track)
+        pcall(function() track:AdjustSpeed(gameAnimSpeed) end)
+    end))
+end
+
+gameAnimCharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+    task.defer(BindGameAnimationSpeed, character)
+end)
+
+ClientTab:Slider("18. Скорость анимаций (0.1x–3x)", 1, 30, 10, function(v)
+    gameAnimSpeed = v / 10
+    ApplyGameAnimationSpeed(GetChar())
+end)
+
+if LocalPlayer.Character then
+    task.defer(BindGameAnimationSpeed, LocalPlayer.Character)
+end
+
+OnUnload(function()
+    if gameAnimCharacterConnection then
+        gameAnimCharacterConnection:Disconnect()
+        gameAnimCharacterConnection = nil
+    end
+    for _, connection in ipairs(gameAnimConnections) do
+        if connection then connection:Disconnect() end
+    end
+    table.clear(gameAnimConnections)
+    gameAnimSpeed = 1
+    ApplyGameAnimationSpeed(GetChar())
 end)
 
 -- 19. Анти-фриз клиента (авто-пинг)
