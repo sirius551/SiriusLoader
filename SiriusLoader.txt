@@ -8191,6 +8191,8 @@ do
         end
     end)
 
+    UtilTab:Section("Sirius MCP · Облако")
+
     if type(req) == "function" and type(token) == "string" and #token >= 32
         and type(baseUrl) == "string" and baseUrl:match("^https://") then
         local mcpRunning = true
@@ -8316,7 +8318,6 @@ do
             return HttpService:JSONDecode(raw)
         end
 
-        UtilTab:Section("Sirius MCP · Облако")
         UtilTab:Button("Проверить соединение с Render", function()
             local ok, response = pcall(mcpRequest, "/health", "GET")
             if ok and response and response.ok == true then
@@ -8408,6 +8409,7 @@ do
         table.insert(Cleanups, function() mcpRunning = false end)
         Notify("Sirius MCP", "Облачный мост активен", 3)
     else
+        UtilTab:Label("MCP не настроен: нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
         warn("[Sirius MCP] Нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
     end
 end
