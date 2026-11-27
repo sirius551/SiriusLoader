@@ -5043,19 +5043,25 @@ end)
 local miscPerfGui, miscPerfConn, miscPerfDragCleanup
 local miscPerfStyleIndex = 1
 local miscPerfStyles = {
-    {name = "Watermark", bg = Color3.fromRGB(12, 14, 20), transparency = 0.08, accent = Color3.fromRGB(114, 137, 218), size = 230},
-    {name = "CS2 Panel", bg = Color3.fromRGB(20, 20, 22), transparency = 0.04, accent = Color3.fromRGB(238, 166, 64), size = 250},
-    {name = "Minimal", bg = Color3.fromRGB(8, 8, 10), transparency = 0.45, accent = Color3.fromRGB(220, 220, 220), size = 210},
-    {name = "Glass", bg = Color3.fromRGB(28, 32, 42), transparency = 0.22, accent = Color3.fromRGB(65, 210, 160), size = 240},
+    {name = "Watermark", bg = Color3.fromRGB(12, 14, 20), transparency = 0.06, accent = Color3.fromRGB(114, 137, 218), card = Color3.fromRGB(25, 29, 40)},
+    {name = "CS2 Panel", bg = Color3.fromRGB(18, 18, 20), transparency = 0.03, accent = Color3.fromRGB(238, 166, 64), card = Color3.fromRGB(34, 32, 29)},
+    {name = "Minimal", bg = Color3.fromRGB(8, 8, 10), transparency = 0.28, accent = Color3.fromRGB(220, 220, 220), card = Color3.fromRGB(30, 30, 32)},
+    {name = "Glass", bg = Color3.fromRGB(25, 30, 40), transparency = 0.16, accent = Color3.fromRGB(65, 210, 160), card = Color3.fromRGB(38, 48, 58)},
 }
+local perfValueLabels, perfCardFrames = {}, {}
 local function ApplyPerfStyle()
     if not miscPerfGui then return end
     local style = miscPerfStyles[miscPerfStyleIndex]
     miscPerfGui.BackgroundColor3 = style.bg
     miscPerfGui.BackgroundTransparency = style.transparency
-    miscPerfGui.TextColor3 = style.accent
-    miscPerfGui.Size = UDim2.new(0, style.size, 0, 116)
-    miscPerfGui.TextSize = miscPerfStyleIndex == 3 and 12 or 13
+    miscPerfGui.Size = UDim2.new(0, 252, 0, 126)
+    if miscPerfGui:FindFirstChild("PerfStroke") then
+        miscPerfGui.PerfStroke.Color = style.accent
+        miscPerfGui.PerfStroke.Transparency = 0.58
+    end
+    if miscPerfGui:FindFirstChild("PerfAccent") then miscPerfGui.PerfAccent.BackgroundColor3 = style.accent end
+    if miscPerfGui:FindFirstChild("PerfTitle") then miscPerfGui.PerfTitle.TextColor3 = style.accent end
+    for _, card in ipairs(perfCardFrames) do card.BackgroundColor3 = style.card end
 end
 
 MiscTab:Button("Стиль виджета мониторинга", function()
@@ -5071,17 +5077,52 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
     if miscPerfGui then miscPerfGui:Destroy() miscPerfGui = nil end
     if not on then return end
 
-    miscPerfGui = New("TextLabel", {
+    perfValueLabels, perfCardFrames = {}, {}
+    miscPerfGui = New("Frame", {
         Name = "SiriusLoaderPerformance", BackgroundColor3 = Color3.fromRGB(12, 14, 20),
-        BackgroundTransparency = 0.08, TextColor3 = Color3.fromRGB(114, 137, 218),
-        Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Center, TextWrapped = true,
-        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 88),
-        Size = UDim2.new(0, 230, 0, 116), ZIndex = 60,
+        BackgroundTransparency = 0.06, BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 88),
+        Size = UDim2.new(0, 252, 0, 126), ZIndex = 60,
         Active = true, Selectable = true,
     }, ScreenGui)
-    Round(miscPerfGui, 10)
-    local stroke = New("UIStroke", {Color = Color3.fromRGB(70, 76, 95), Transparency = 0.25, Thickness = 1}, miscPerfGui)
+    Round(miscPerfGui, 12)
+    New("UIStroke", {Name = "PerfStroke", Color = Color3.fromRGB(70, 76, 95), Transparency = 0.58, Thickness = 1}, miscPerfGui)
+    New("Frame", {Name = "PerfAccent", BackgroundColor3 = Color3.fromRGB(114, 137, 218), BorderSizePixel = 0, Size = UDim2.new(0, 3, 1, -20), Position = UDim2.new(0, 0, 0, 10), ZIndex = 61}, miscPerfGui)
+    local title = New("TextLabel", {
+        Name = "PerfTitle", BackgroundTransparency = 1, Position = UDim2.new(0, 14, 0, 8),
+        Size = UDim2.new(1, -28, 0, 18), Font = Enum.Font.GothamBold,
+        Text = "SIRIUS  /  SYSTEM MONITOR", TextColor3 = Color3.fromRGB(114, 137, 218),
+        TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 62,
+    }, miscPerfGui)
+    local status = New("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(1, -48, 0, 8), Size = UDim2.new(0, 34, 0, 18),
+        Font = Enum.Font.GothamBold, Text = "LIVE", TextColor3 = Color3.fromRGB(90, 210, 145),
+        TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 62,
+    }, miscPerfGui)
+
+    local function makePerfCard(key, caption, x, y)
+        local card = New("Frame", {
+            BackgroundColor3 = Color3.fromRGB(25, 29, 40), BackgroundTransparency = 0.08,
+            BorderSizePixel = 0, Position = UDim2.new(0, x, 0, y), Size = UDim2.new(0, 108, 0, 38), ZIndex = 61,
+        }, miscPerfGui)
+        Round(card, 7)
+        table.insert(perfCardFrames, card)
+        New("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 4), Size = UDim2.new(1, -16, 0, 11),
+            Font = Enum.Font.GothamMedium, Text = caption, TextColor3 = Color3.fromRGB(145, 153, 170),
+            TextSize = 8, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 62,
+        }, card)
+        perfValueLabels[key] = New("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.new(0, 8, 0, 16), Size = UDim2.new(1, -16, 0, 17),
+            Font = Enum.Font.GothamBold, Text = "--", TextColor3 = Color3.fromRGB(235, 238, 245),
+            TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 62,
+        }, card)
+    end
+    makePerfCard("fps", "FRAME RATE", 12, 34)
+    makePerfCard("ping", "NETWORK PING", 132, 34)
+    makePerfCard("ram", "ROBLOX MEMORY", 12, 78)
+    makePerfCard("device", "CPU / GPU", 132, 78)
+
     miscPerfDragCleanup = MakeHudDraggable(miscPerfGui)
     ApplyPerfStyle()
 
@@ -5097,22 +5138,15 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
         end
         if refresh < 0.5 then return end
         refresh = 0
-
         local ping = "--"
         pcall(function()
-            ping = tostring(math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5))
+            ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5)
         end)
-        pcall(function()
-            memoryMb = Stats:GetTotalMemoryUsageMb()
-        end)
-
-        if miscPerfGui then
-            local pcSuffix = UIS.KeyboardEnabled and "PC" or "Device"
-            miscPerfGui.Text = string.format(
-                "SIRIUS  |  %s\nFPS  %d     PING  %s ms\nCPU  N/A       GPU  N/A\nRAM  %.0f MB   |  %s",
-                miscPerfStyles[miscPerfStyleIndex].name, fps, ping, memoryMb, pcSuffix
-            )
-        end
+        pcall(function() memoryMb = Stats:GetTotalMemoryUsageMb() end)
+        if perfValueLabels.fps then perfValueLabels.fps.Text = tostring(fps) end
+        if perfValueLabels.ping then perfValueLabels.ping.Text = ping == "--" and "--" or (tostring(ping) .. " ms") end
+        if perfValueLabels.ram then perfValueLabels.ram.Text = string.format("%.0f MB", memoryMb) end
+        if perfValueLabels.device then perfValueLabels.device.Text = "N/A   /   N/A" end
     end)
 end)
 OnUnload(function()
