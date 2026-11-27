@@ -872,10 +872,74 @@ end
 
 -- Подменяет loadstring внутри запускаемого кода: если скачанный текст не Lua (404, HTML и т.д.),
 -- вместо «attempt to call a nil value» будет настоящая причина и начало ответа сервера.
-local function wrapEnv(fn)
+-- Дочерние скрипты Sirius: каждый получает собственный контейнер очистки.
+local ChildScripts = {}
+local ChildScriptId = 0
+
+local function CleanupChild(child)
+    if not child or child.Stopped then return end
+    child.Stopped = true
+    for i = #child.Cleanups, 1, -1 do pcall(child.Cleanups[i]) end
+    for _, connection in ipairs(child.Connections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    for _, instance in ipairs(child.Instances) do
+        pcall(function() instance:Destroy() end)
+    end
+    child.Cleanups, child.Connections, child.Instances = {}, {}, {}
+end
+
+local function CleanupChildScripts()
+    for i = #ChildScripts, 1, -1 do CleanupChild(ChildScripts[i]) end
+    table.clear(ChildScripts)
+end
+
+local function CreateChildScript(name)
+    ChildScriptId += 1
+    local child = {
+        Id = ChildScriptId, Name = tostring(name), Stopped = false,
+        Cleanups = {}, Connections = {}, Instances = {},
+    }
+    function child:IsRunning() return not self.Stopped end
+    function child:AddCleanup(callback)
+        if type(callback) ~= "function" then return false end
+        if self.Stopped then pcall(callback) else table.insert(self.Cleanups, callback) end
+        return true
+    end
+    function child:TrackConnection(connection)
+        if typeof(connection) == "RBXScriptConnection" then
+            if self.Stopped then pcall(function() connection:Disconnect() end)
+            else table.insert(self.Connections, connection) end
+        end
+        return connection
+    end
+    function child:TrackInstance(instance)
+        if typeof(instance) == "Instance" then
+            if self.Stopped then pcall(function() instance:Destroy() end)
+            else table.insert(self.Instances, instance) end
+        end
+        return instance
+    end
+    function child:Spawn(callback)
+        if type(callback) ~= "function" or self.Stopped then return nil end
+        local thread = task.spawn(function()
+            if not self.Stopped then
+                local ok, err = pcall(callback, self)
+                if not ok then warn("[Sirius child: " .. self.Name .. "] " .. tostring(err)) end
+            end
+        end)
+        self:AddCleanup(function() pcall(task.cancel, thread) end)
+        return thread
+    end
+    table.insert(ChildScripts, child)
+    return child
+end
+
+local function wrapEnv(fn, child)
     pcall(function()
         local base = (getgenv and getgenv()) or getfenv(0)
         local env = setmetatable({
+            SiriusChild = child,
             loadstring = function(src, ...)
                 local f, e = loadstring(src, ...)
                 if not f then
@@ -900,9 +964,18 @@ local function RunUrl(name, url)
     end
     local fn, cerr = loadstring(src)
     if not fn then error("ошибка компиляции: " .. tostring(cerr), 0) end
-    local ok, err = pcall(wrapEnv(fn))
-    if not ok then error(tostring(err), 0) end
-    Notify("Готово", name .. " запущен", 2)
+    local child = CreateChildScript(name)
+    local ok, result = pcall(wrapEnv(fn, child))
+    if not ok then
+        CleanupChild(child)
+        error(tostring(result), 0)
+    end
+    if type(result) == "function" then child:AddCleanup(result)
+    elseif type(result) == "table" then
+        if type(result.Cleanup) == "function" then child:AddCleanup(function() result:Cleanup() end) end
+        if type(result.Destroy) == "function" then child:AddCleanup(function() result:Destroy() end) end
+    end
+    Notify("Готово", name .. " запущен как дочерний скрипт", 2)
 end
 
 -- Чип с биндом клавиши рядом с функцией
@@ -1466,6 +1539,7 @@ local function UnloadHub()
         Tween(MainFrame, 0.25, {BackgroundTransparency = 1, Size = UDim2.new(0, 0, 0, 0)})
     end)
     task.wait(0.27)
+    CleanupChildScripts()
     for _, tg in ipairs(Toggles) do pcall(function() if tg:Get() then tg:Set(false) end end) end
     for _, fn in ipairs(Cleanups) do pcall(fn) end
     for _, c in ipairs(Conns) do
