@@ -8410,7 +8410,8 @@ do
     else
         warn("[Sirius MCP] Нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
     end
-endend
+end
+end
 
 SelectTab("Главная")
 
