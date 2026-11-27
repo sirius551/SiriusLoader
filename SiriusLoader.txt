@@ -2592,30 +2592,56 @@ RageTab:Slider("Скорость Spin", 5, 90, 30, function(v) aa.speed = v end)
 RageTab:Slider("Угол Jitter", 10, 180, 60, function(v) aa.jitter = v end)
 
 RageTab:Section("Fake Lag")
-local fl = {on = false, interval = 0.4, duration = 0.15}
+local fl = {
+    on = false,
+    random = false,
+    interval = 0.4,
+    duration = 0.15,
+    intervalMin = 0.25,
+    intervalMax = 0.8,
+    durationMin = 0.08,
+    durationMax = 0.22,
+    generation = 0,
+}
 local function StopFL()
     fl.on = false
+    fl.generation += 1
     local r = GetRoot()
     if r then r.Anchored = false end
 end
 RageTab:Toggle("Fake Lag", false, function(on)
     if not on then StopFL() return end
+    StopFL()
     fl.on = true
+    fl.generation += 1
+    local generation = fl.generation
     task.spawn(function()
-        while fl.on do
+        while fl.on and fl.generation == generation do
+            local interval = fl.interval
+            local duration = fl.duration
+            if fl.random then
+                interval = fl.intervalMin + math.random() * (fl.intervalMax - fl.intervalMin)
+                duration = fl.durationMin + math.random() * (fl.durationMax - fl.durationMin)
+            end
+
             local r = GetRoot()
             if r then
                 r.Anchored = true
-                task.wait(fl.duration)
-                r.Anchored = false
+                task.wait(duration)
+                if r.Parent then r.Anchored = false end
             end
-            task.wait(fl.interval)
+            task.wait(interval)
         end
     end)
 end)
 OnUnload(StopFL)
+RageTab:Toggle("Случайное время Fake Lag", false, function(v) fl.random = v end)
 RageTab:Slider("Интервал (сек)", 0.1, 2, 0.4, function(v) fl.interval = v end, 2)
 RageTab:Slider("Длительность заморозки (сек)", 0.05, 0.6, 0.15, function(v) fl.duration = v end, 2)
+RageTab:Slider("Мин. интервал (сек)", 0.1, 2, 0.25, function(v) fl.intervalMin = math.min(v, fl.intervalMax) end, 2)
+RageTab:Slider("Макс. интервал (сек)", 0.1, 3, 0.8, function(v) fl.intervalMax = math.max(v, fl.intervalMin) end, 2)
+RageTab:Slider("Мин. длительность (сек)", 0.05, 0.6, 0.08, function(v) fl.durationMin = math.min(v, fl.durationMax) end, 2)
+RageTab:Slider("Макс. длительность (сек)", 0.05, 0.8, 0.22, function(v) fl.durationMax = math.max(v, fl.durationMin) end, 2)
 
 RageTab:Section("Rage Aimbot")
 local rage = {part = 1, wall = false, auto = false, team = true, conn = nil, last = 0}
@@ -7415,17 +7441,102 @@ ClientTab:Toggle("28. Хай-контраст (жёсткий свет)", false,
 end)
 OnUnload(function() if hiCC then hiCC:Destroy() end end)
 
--- 29. Ночное видение (зелёный фильтр + яркость)
+-- 29. Ночное видение + мягкая красная подсветка персонажей в пределах видимости.
 local nvCC
-ClientTab:Toggle("29. Ночное видение", false, function(on)
+local nvHighlights = {}
+local nvConnections = {}
+local NV_RANGE = 20
+local function clearNVHighlights()
+    for model, highlight in pairs(nvHighlights) do
+        if highlight then highlight:Destroy() end
+        nvHighlights[model] = nil
+    end
+end
+local function stopNV()
+    for _, connection in ipairs(nvConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    table.clear(nvConnections)
+    clearNVHighlights()
     if nvCC then nvCC:Destroy() nvCC = nil end
+end
+local function addNVHighlight(model)
+    if not model or model == GetChar() or nvHighlights[model] then return end
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local root = model:FindFirstChild("HumanoidRootPart")
+    if not humanoid or humanoid.Health <= 0 or not root then return end
+    local highlight = New("Highlight", {
+        Name = "SL_NV_RedGlow",
+        Adornee = model,
+        DepthMode = Enum.HighlightDepthMode.Occluded,
+        FillColor = Color3.fromRGB(255, 24, 24),
+        OutlineColor = Color3.fromRGB(255, 70, 70),
+        FillTransparency = 0.82,
+        OutlineTransparency = 0.35,
+    }, model)
+    nvHighlights[model] = highlight
+end
+local function updateNVHighlights()
+    local camera = workspace.CurrentCamera
+    local origin = camera and camera.CFrame.Position
+    if not origin then return end
+    local seen = {}
+    local function consider(model)
+        if not model or model == GetChar() then return end
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        local root = model:FindFirstChild("HumanoidRootPart")
+        if not humanoid or humanoid.Health <= 0 or not root then return end
+        local distance = (root.Position - origin).Magnitude
+        if distance > NV_RANGE then
+            local old = nvHighlights[model]
+            if old then old:Destroy() nvHighlights[model] = nil end
+            return
+        end
+        seen[model] = true
+        addNVHighlight(model)
+        local highlight = nvHighlights[model]
+        if highlight then
+            local strength = 1 - math.clamp(distance / NV_RANGE, 0, 1)
+            highlight.FillTransparency = 0.94 - strength * 0.28
+            highlight.OutlineTransparency = 0.75 - strength * 0.45
+        end
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        consider(player.Character)
+    end
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+            consider(obj)
+        end
+    end
+    for model, highlight in pairs(nvHighlights) do
+        if not model.Parent or not seen[model] then
+            if highlight then highlight:Destroy() end
+            nvHighlights[model] = nil
+        end
+    end
+end
+ClientTab:Toggle("29. Ночное видение", false, function(on)
+    stopNV()
     if not on then return end
     nvCC = New("ColorCorrectionEffect", {
         Name="SL_NV", Brightness=0.5, Saturation=-0.5, Contrast=0.3,
         TintColor=Color3.fromRGB(100,255,120),
     }, Lighting)
+    table.insert(nvConnections, RunService.Heartbeat:Connect(updateNVHighlights))
+    table.insert(nvConnections, Players.PlayerAdded:Connect(function(player)
+        table.insert(nvConnections, player.CharacterAdded:Connect(function(character)
+            task.defer(addNVHighlight, character)
+        end))
+    end))
+    for _, player in ipairs(Players:GetPlayers()) do
+        table.insert(nvConnections, player.CharacterAdded:Connect(function(character)
+            task.defer(addNVHighlight, character)
+        end))
+    end
 end)
-OnUnload(function() if nvCC then nvCC:Destroy() end end)
+OnUnload(stopNV)
 
 -- 30. Хроматические аберрации (двойник)
 local caConn, caGui
@@ -7856,25 +7967,42 @@ end)
 
 ClientTab:Section("Клиентские авто-действия")
 
--- 41. Авто-обход препятствий (jump при столкновении)
+-- 41. Авто-прыжок только при реальном вертикальном препятствии, не при подъёме по ступенькам.
 local wallJumpConn
 ClientTab:Toggle("41. Авто-прыжок при столкновении", false, function(on)
     if wallJumpConn then wallJumpConn:Disconnect() wallJumpConn = nil end
     if not on then return end
-    local lastV = Vector3.zero
+
+    local lastJump = 0
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
     wallJumpConn = RunService.Heartbeat:Connect(function()
+        local character = GetChar()
         local r, h = GetRoot(), GetHum()
-        if not (r and h) then return end
-        local v = r.AssemblyLinearVelocity
-        local horiz = Vector3.new(v.X,0,v.Z).Magnitude
-        local lastH = Vector3.new(lastV.X,0,lastV.Z).Magnitude
-        if h.MoveDirection.Magnitude > 0.1 and h.FloorMaterial ~= Enum.Material.Air and horiz < lastH * 0.5 and lastH > 4 then
+        if not (character and r and h) then return end
+        if h.Health <= 0 or h.FloorMaterial == Enum.Material.Air then return end
+        if h.MoveDirection.Magnitude < 0.15 or os.clock() - lastJump < 0.45 then return end
+
+        rayParams.FilterDescendantsInstances = {character}
+        local direction = h.MoveDirection.Unit
+        local chestOrigin = r.Position + Vector3.new(0, 1.1, 0)
+        local chestHit = workspace:Raycast(chestOrigin, direction * 2.4, rayParams)
+        if not chestHit then return end
+
+        -- Ступеньки и низкие бортики не считаем стеной: проверяем препятствие выше уровня стоп.
+        local obstacleHeight = chestHit.Position.Y - (r.Position.Y - 2.5)
+        local normalY = chestHit.Normal.Y
+        if obstacleHeight < 1.25 or normalY > 0.35 then return end
+
+        local headOrigin = r.Position + Vector3.new(0, 2.2, 0)
+        local headHit = workspace:Raycast(headOrigin, direction * 2.4, rayParams)
+        if not headHit then
+            lastJump = os.clock()
             h:ChangeState(Enum.HumanoidStateType.Jumping)
         end
-        lastV = v
     end)
 end)
-OnUnload(function() if wallJumpConn then wallJumpConn:Disconnect() end end)
+OnUnload(function() if wallJumpConn then wallJumpConn:Disconnect() wallJumpConn = nil end end)
 
 -- 42. Авто-сбор ближайшего инструмента
 local toolPickConn
