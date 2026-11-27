@@ -5183,7 +5183,7 @@ MiscTab:Button("Стиль виджета мониторинга", function()
     ApplyPerfStyle()
     Notify("Мониторинг", "Стиль: " .. miscPerfStyles[miscPerfStyleIndex].name, 2)
 end)
-MiscTab:Label("На ПК Roblox не предоставляет Lua-скриптам реальную загрузку CPU/GPU. Эти показатели будут отмечены как N/A, без выдуманных процентов. RAM — память процесса Roblox.")
+MiscTab:Label("Watermark отображает FPS, Ping и память процесса Roblox.")
 
 MiscTab:Toggle("Мониторинг системы / Watermark", false, function(on)
     if miscPerfConn then miscPerfConn:Disconnect() miscPerfConn = nil end
@@ -5196,7 +5196,7 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
         Name = "SiriusLoaderPerformance", BackgroundColor3 = Color3.fromRGB(12, 14, 20),
         BackgroundTransparency = 0.06, BorderSizePixel = 0,
         AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 88),
-        Size = UDim2.new(0, 252, 0, 126), ZIndex = 60,
+        Size = UDim2.new(0, 252, 0, 92), ZIndex = 60,
         Active = true, Selectable = true,
     }, ScreenGui)
     Round(miscPerfGui, 12)
@@ -5217,7 +5217,7 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
     local function makePerfCard(key, caption, x, y)
         local card = New("Frame", {
             BackgroundColor3 = Color3.fromRGB(25, 29, 40), BackgroundTransparency = 0.08,
-            BorderSizePixel = 0, Position = UDim2.new(0, x, 0, y), Size = UDim2.new(0, 108, 0, 38), ZIndex = 61,
+            BorderSizePixel = 0, Position = UDim2.new(0, x, 0, y), Size = UDim2.new(0, 72, 0, 42), ZIndex = 61,
         }, miscPerfGui)
         Round(card, 7)
         table.insert(perfCardFrames, card)
@@ -5232,10 +5232,9 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
             TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 62,
         }, card)
     end
-    makePerfCard("fps", "FRAME RATE", 12, 34)
-    makePerfCard("ping", "NETWORK PING", 132, 34)
-    makePerfCard("ram", "ROBLOX MEMORY", 12, 78)
-    makePerfCard("device", "CPU / GPU", 132, 78)
+    makePerfCard("fps", "FPS", 12, 34)
+    makePerfCard("ping", "PING", 92, 34)
+    makePerfCard("ram", "RAM", 172, 34)
 
     miscPerfDragCleanup = MakeHudDraggable(miscPerfGui)
     ApplyPerfStyle()
@@ -5260,7 +5259,6 @@ MiscTab:Toggle("Мониторинг системы / Watermark", false, functio
         if perfValueLabels.fps then perfValueLabels.fps.Text = tostring(fps) end
         if perfValueLabels.ping then perfValueLabels.ping.Text = ping == "--" and "--" or (tostring(ping) .. " ms") end
         if perfValueLabels.ram then perfValueLabels.ram.Text = string.format("%.0f MB", memoryMb) end
-        if perfValueLabels.device then perfValueLabels.device.Text = "N/A   /   N/A" end
     end)
 end)
 OnUnload(function()
