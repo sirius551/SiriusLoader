@@ -1896,8 +1896,19 @@ end
 -- ==================== COMBAT ====================
 do
 CombatTab:Section("Aimbot")
-aimbot = {Conns = {}, FOV = 150, Smooth = 0.35, TeamCheck = true, Circle = nil, Pred = 0}
+aimbot = {Conns = {}, FOV = 150, Smooth = 0.35, TeamCheck = true, WallCheck = false, Circle = nil, Pred = 0}
 local aiming = false
+local function aimbotVisibleCheck(part)
+    local cam = workspace.CurrentCamera
+    if not cam or not part or not part.Parent then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {GetChar(), cam}
+    local origin = cam.CFrame.Position
+    local direction = part.Position - origin
+    local result = workspace:Raycast(origin, direction, params)
+    return result == nil or result.Instance:IsDescendantOf(part.Parent)
+end
 local function StopAimbot()
     for _, c in ipairs(aimbot.Conns) do pcall(function() c:Disconnect() end) end
     aimbot.Conns = {}
@@ -1930,7 +1941,10 @@ CombatTab:Toggle("Aimbot (удерживать Q / ПКМ)", false, function(on)
                         local sp, onScreen = cam:WorldToViewportPoint(head.Position)
                         if onScreen then
                             local d = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-                            if d <= aimbot.FOV and d < shortest then shortest, closest = d, head end
+                            if d <= aimbot.FOV and d < shortest
+                                and (not aimbot.WallCheck or aimbotVisibleCheck(head)) then
+                                shortest, closest = d, head
+                            end
                         end
                     end
                 end
@@ -1964,6 +1978,7 @@ CombatTab:Slider("FOV радиус", 50, 500, 150, function(v) aimbot.FOV = v en
 CombatTab:Slider("Плавность наводки", 0, 0.95, 0.35, function(v) aimbot.Smooth = v end, 2)
 CombatTab:Slider("Упреждение движения цели", 0, 0.4, 0, function(v) aimbot.Pred = v end, 2)
 CombatTab:Toggle("Игнорировать свою команду", true, function(v) aimbot.TeamCheck = v end)
+CombatTab:Toggle("Wall Check (только видимые цели)", false, function(v) aimbot.WallCheck = v end)
 
 local trigConn
 local trig = {
