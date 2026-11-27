@@ -1982,124 +1982,189 @@ CombatTab:Toggle("Wall Check (только видимые цели)", false, fun
 
 local trigConn
 local trig = {
-    delay    = 0.05,  -- задержка перед выстрелом
-    burstGap = 0.0,   -- пауза между выстрелами
-    hitbox   = 3.5,   -- расширение хитбокса (studs)
-    mode     = "ray", -- "ray" = рейкаст | "sphere" = проверка по сфере вокруг прицела
+    delay = 0.05,
+    burstGap = 0,
+    hitbox = 3.5,
+    mode = "ray",
+    enabled = false,
+    generation = 0,
+    pending = false,
+    models = {},
+    addedConn = nil,
 }
 
--- Находит Humanoid в хиерархии (до 3 уровней вверх — R6, R15, кастом)
-local function findHum(inst)
-    if not inst then return nil end
-    for _ = 1, 3 do
-        local h = inst:FindFirstChildOfClass("Humanoid")
-        if h then return h end
-        inst = inst.Parent
-        if not inst or inst == workspace then break end
+-- Возвращает модель персонажа/NPC и живой Humanoid для любой детали внутри модели.
+local function getHumanoidModel(inst)
+    local current = inst
+    while current and current ~= workspace do
+        if current:IsA("Model") then
+            local hum = current:FindFirstChildOfClass("Humanoid")
+            if hum then return hum, current end
+        end
+        current = current.Parent
     end
-    return nil
+    return nil, nil
 end
 
--- Проверяет team check
 local function isEnemy(char)
-    if not char then return false end
+    if not char or char == LocalPlayer.Character then return false end
     if not (aimbot and aimbot.TeamCheck) then return true end
-    local ep = Players:GetPlayerFromCharacter(char)
-    if not ep then return true end  -- NPC = всегда враг
-    return ep.Team == nil or ep.Team ~= LocalPlayer.Team
+    local player = Players:GetPlayerFromCharacter(char)
+    if not player then return true end -- NPC остаются допустимыми целями
+    return player.Team == nil or player.Team ~= LocalPlayer.Team
 end
 
--- Режим 1: рейкаст из точки камеры по направлению взгляда
-local function trigRaycast(cam, myChar)
-    local cf  = cam.CFrame
-    local org = cf.Position
-    local dir = cf.LookVector * 1500
+local function registerTriggerModel(inst)
+    if not inst then return end
+    local hum, model = getHumanoidModel(inst)
+    if hum and model and model ~= LocalPlayer.Character then
+        trig.models[model] = hum
+    end
+end
 
+local function refreshTriggerModels()
+    table.clear(trig.models)
+    for _, inst in ipairs(workspace:GetDescendants()) do
+        if inst:IsA("Humanoid") then
+            registerTriggerModel(inst)
+        end
+    end
+end
+
+local function hasClearLine(cam, myChar, targetModel, part)
+    local origin = cam.CFrame.Position
+    local direction = part.Position - origin
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances = {myChar}
-
-    local result = workspace:Raycast(org, dir, params)
-    if not result then return false end
-
-    local hum = findHum(result.Instance)
-    if not hum or hum.Health <= 0 then return false end
-    if not isEnemy(hum.Parent) then return false end
-    return true
+    local result = workspace:Raycast(origin, direction, params)
+    return result ~= nil and result.Instance:IsDescendantOf(targetModel)
 end
 
--- Режим 2: сфера вокруг точки прицела на расстоянии N studs
--- Работает даже если рейкаст заблокирован стеной в паре пикселей
+-- Режим Raycast: срабатывает на игроках и NPC, включая детали аксессуаров.
+local function trigRaycast(cam, myChar)
+    local origin = cam.CFrame.Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {myChar}
+    local result = workspace:Raycast(origin, cam.CFrame.LookVector * 1500, params)
+    if not result then return false end
+
+    local hum, model = getHumanoidModel(result.Instance)
+    return hum ~= nil and hum.Health > 0 and isEnemy(model)
+end
+
+-- Режим Sphere: проверяет закешированные модели с Humanoid, включая NPC.
 local function trigSphere(cam, myChar)
-    local org  = cam.CFrame.Position
+    local origin = cam.CFrame.Position
     local look = cam.CFrame.LookVector
 
-    -- Итерируем всех игроков, ищем того чья голова/торс попадает в конус прицела
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
-        local char = p.Character
-        if not char then continue end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-        if not isEnemy(char) then continue end
+    for model, cachedHum in pairs(trig.models) do
+        if not model.Parent or not model:IsDescendantOf(workspace) then
+            trig.models[model] = nil
+            continue
+        end
+        local hum = model:FindFirstChildOfClass("Humanoid") or cachedHum
+        if not hum or hum.Health <= 0 or not isEnemy(model) then continue end
 
-        -- Проверяем HumanoidRootPart и Head
-        for _, partName in ipairs({"HumanoidRootPart", "Head"}) do
-            local part = char:FindFirstChild(partName)
-            if not part then continue end
+        local checked = {}
+        for _, partName in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "Torso"}) do
+            local part = model:FindFirstChild(partName)
+            if part and part:IsA("BasePart") and not checked[part] then
+                checked[part] = true
+                local toTarget = part.Position - origin
+                local dist = toTarget.Magnitude
+                if dist > 0 and dist <= 1500 then
+                    local dot = look:Dot(toTarget.Unit)
+                    local threshold = math.clamp(trig.hitbox / dist, 0, 1)
+                    if dot >= (1 - threshold) and hasClearLine(cam, myChar, model, part) then
+                        return true
+                    end
+                end
+            end
+        end
 
-            local toTarget = (part.Position - org)
-            local dist     = toTarget.Magnitude
-            if dist > 1500 then continue end
-
-            -- Угол между взглядом камеры и направлением к части тела
-            local dot = look:Dot(toTarget.Unit)
-            -- dot = 1 → прямо в цель, dot = 0 → 90°
-            -- Переводим hitbox в угловой порог: hitbox studs на dist studs
-            local threshold = math.clamp(trig.hitbox / dist, 0, 1)
-            if dot >= (1 - threshold) then
-                -- Дополнительно: проверяем что между нами и целью нет стены
-                local params = RaycastParams.new()
-                params.FilterType = Enum.RaycastFilterType.Exclude
-                params.FilterDescendantsInstances = {myChar, char}
-                local wall = workspace:Raycast(org, toTarget.Unit * dist, params)
-                if not wall then return true end  -- нет стены — огонь
+        -- Для нестандартных NPC-моделей без стандартных имён частей.
+        if not next(checked) then
+            local part = model.PrimaryPart
+            if part then
+                local toTarget = part.Position - origin
+                local dist = toTarget.Magnitude
+                if dist > 0 and dist <= 1500 then
+                    local dot = look:Dot(toTarget.Unit)
+                    local threshold = math.clamp(trig.hitbox / dist, 0, 1)
+                    if dot >= (1 - threshold) and hasClearLine(cam, myChar, model, part) then
+                        return true
+                    end
+                end
             end
         end
     end
     return false
 end
 
+local function triggerTargetUnderCrosshair()
+    local cam = workspace.CurrentCamera
+    local myChar = LocalPlayer.Character
+    if not cam or not myChar then return false end
+    if trig.mode == "sphere" then
+        return trigSphere(cam, myChar)
+    end
+    return trigRaycast(cam, myChar)
+end
+
+local function StopTriggerbot()
+    trig.enabled = false
+    trig.generation += 1 -- инвалидирует все отложенные выстрелы
+    trig.pending = false
+    if trigConn then
+        trigConn:Disconnect()
+        trigConn = nil
+    end
+    if trig.addedConn then
+        trig.addedConn:Disconnect()
+        trig.addedConn = nil
+    end
+    table.clear(trig.models)
+end
+
 CombatTab:Section("Triggerbot")
 CombatTab:Toggle("Triggerbot", false, function(on)
-    if trigConn then trigConn:Disconnect() trigConn = nil end
+    StopTriggerbot()
     if not on then return end
 
-    local cam    = workspace.CurrentCamera
-    local nextFire = 0  -- tick() когда можно стрелять снова (без task.wait в Heartbeat)
+    trig.enabled = true
+    trig.generation += 1
+    local generation = trig.generation
 
+    -- Первичное заполнение кэша NPC/игроков выполняется один раз при включении.
+    refreshTriggerModels()
+    trig.addedConn = workspace.DescendantAdded:Connect(function(inst)
+        if inst:IsA("Humanoid") or inst:IsA("Model") then
+            registerTriggerModel(inst)
+        end
+    end)
+
+    local nextFire = 0
     trigConn = RunService.Heartbeat:Connect(function()
-        if tick() < nextFire then return end
+        if not trig.enabled or generation ~= trig.generation or trig.pending then return end
+        local now = os.clock()
+        if now < nextFire or not triggerTargetUnderCrosshair() then return end
 
-        local myChar = LocalPlayer.Character
-        if not myChar then return end
-
-        local hit = trig.mode == "sphere"
-            and trigSphere(cam, myChar)
-            or  trigRaycast(cam, myChar)
-
-        if not hit then return end
-
-        -- Задержка через tick() — не блокирует Heartbeat
         if trig.delay > 0 then
-            nextFire = tick() + trig.delay
+            trig.pending = true
             task.delay(trig.delay, function()
-                ClickOnce()
-                nextFire = tick() + trig.burstGap
+                if generation ~= trig.generation or not trig.enabled then return end
+                trig.pending = false
+                -- Повторная проверка verhindert выстрел по уже исчезнувшей/закрытой цели.
+                if triggerTargetUnderCrosshair() then
+                    ClickOnce()
+                    nextFire = os.clock() + trig.burstGap
+                end
             end)
         else
             ClickOnce()
-            nextFire = tick() + trig.burstGap
+            nextFire = now + trig.burstGap
         end
     end)
 end)
@@ -2117,7 +2182,7 @@ CombatTab:Slider("TB · Hitbox-порог (studs)", 1, 20, 4, function(v)
     trig.hitbox = v
 end)
 
-OnUnload(function() if trigConn then trigConn:Disconnect() end end)
+OnUnload(StopTriggerbot)
 
 local spinSpeed, spinConn = 20, nil
 CombatTab:Toggle("Spinbot", false, function(on)
