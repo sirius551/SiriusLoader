@@ -5137,6 +5137,7 @@ local gradientA = Config.GradientA or {0, 0, 0}
 local gradientB = Config.GradientB or {255, 255, 255}
 local gradientSpeed = tonumber(Config.GradientSpeed) or 0.25
 local gradientClock = 0
+local refreshAccentMode
 local function colorFromRGB(t)
     return Color3.fromRGB(
         math.clamp(tonumber(t[1]) or 0, 0, 255),
@@ -5212,7 +5213,7 @@ MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed,
     gradientSpeed = v Config.GradientSpeed = v SaveConfig()
 end, 2)
 local gradientConn
-local function refreshAccentMode()
+refreshAccentMode = function()
     if accentMode == "solid" then
         updateAccentGradients(nil, nil, true)
         return
