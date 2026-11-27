@@ -356,30 +356,43 @@ local function ApplyFullTheme(light)
         end
     end
 
-    -- Rebalance readable text colors across all existing controls.
+    -- Repaint neutral UI surfaces and text, including controls created with literal colors.
     if ScreenGui and ScreenGui.Parent then
         for _, obj in ipairs(ScreenGui:GetDescendants()) do
             if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-                local c = obj.TextColor3
-                local brightness = (c.R + c.G + c.B) / 3
-                if light and brightness > 0.72 then
-                    obj.TextColor3 = t.Text
-                elseif not light and brightness < 0.32 then
-                    obj.TextColor3 = Color3.fromRGB(235, 240, 250)
+                if obj.BackgroundTransparency >= 0.85 then
+                    obj.TextColor3 = light and t.Text or Color3.fromRGB(235, 240, 250)
+                else
+                    local bg = obj.BackgroundColor3
+                    local bgLum = (bg.R * 0.299 + bg.G * 0.587 + bg.B * 0.114)
+                    obj.TextColor3 = (light and bgLum > 0.58) and t.Text
+                        or ((not light and bgLum < 0.35) and Color3.fromRGB(240, 245, 255) or obj.TextColor3)
+                end
+            end
+            if obj:IsA("GuiObject") and obj.BackgroundTransparency < 0.95 then
+                local c = obj.BackgroundColor3
+                local hi = math.max(c.R, c.G, c.B)
+                local lo = math.min(c.R, c.G, c.B)
+                local saturation = hi - lo
+                if saturation < 0.16 then
+                    obj.BackgroundColor3 = light and THEMES.light.Element or THEMES.dark.Element
+                    if obj:IsA("TextButton") or obj:IsA("TextBox") then
+                        obj.TextColor3 = light and THEMES.light.Text or THEMES.dark.Text
+                    end
                 end
             end
         end
     end
 
-    -- Light mode should be a solid, clean surface rather than a translucent overlay.
+    -- Make light mode intentionally opaque and remove the game scene from behind controls.
     if MainFrame then
-        MainFrame.BackgroundTransparency = light and 0.02 or (tonumber(Config.Transparency) or 0)
-        WallpaperTint.BackgroundTransparency = light and 0.08
-            or math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
-        WallpaperImage.ImageTransparency = light and 0.82 or (tonumber(Config.WallpaperTransparency) or 0.15)
-        TopBar.BackgroundTransparency = light and 0.02 or 0.12
-        Sidebar.BackgroundTransparency = light and 0.02 or 0.12
-        SearchBox.BackgroundTransparency = light and 0.02 or 0.08
+        MainFrame.BackgroundTransparency = light and 0 or (tonumber(Config.Transparency) or 0)
+        WallpaperTint.BackgroundColor3 = light and Color3.fromRGB(242, 245, 251) or THEMES.dark.Background
+        WallpaperTint.BackgroundTransparency = light and 0 or math.clamp(0.42 + (tonumber(Config.Transparency) or 0) * 0.5, 0.42, 0.9)
+        WallpaperImage.ImageTransparency = light and 1 or (tonumber(Config.WallpaperTransparency) or 0.15)
+        TopBar.BackgroundTransparency = light and 0 or 0.12
+        Sidebar.BackgroundTransparency = light and 0 or 0.12
+        SearchBox.BackgroundTransparency = light and 0 or 0.08
     end
 end
 
@@ -8958,6 +8971,17 @@ SettingsTab:Toggle("☀ Светлая тема", false, function(on)
            on and "Светлая тема включена" or "Тёмная тема включена", 2)
 end)
 
+SettingsTab:Section("Обновления")
+SettingsTab:Button("Проверить обновления GitHub", function()
+    local checker = getgenv and getgenv().SiriusCheckUpdates
+    if type(checker) == "function" then
+        task.spawn(checker)
+    else
+        Notify("Sirius Update", "Проверка обновлений ещё запускается. Повтори через пару секунд.", 3, true)
+    end
+end, true)
+SettingsTab:Label("Автоматическая проверка выполняется при запуске и затем каждые 2 минуты.")
+
 SettingsTab:Section("Тема акцента")
 local presets = {
     {"Blue (по умолчанию)", Color3.fromRGB(114, 137, 218)},
@@ -9695,20 +9719,36 @@ do
         end
     end
 
-    task.spawn(function()
-        local state = readUpdateState()
-        local firstCheck = getLatestCommit()
-        if not firstCheck then
-            Notify("Sirius Update", "Не удалось проверить GitHub. Повторю проверку позже.", 4)
-        else
-            latestCommit = firstCheck
-            if type(state.lastSeenCommit) ~= "string" then
-                saveUpdateState(firstCheck)
-            elseif state.lastSeenCommit ~= firstCheck then
-                showUpdateDialog(firstCheck)
-            end
+    local function checkForUpdates(manual)
+        if updateBusy or updateDialogOpen then
+            if manual then Notify("Sirius Update", "Проверка уже выполняется.", 2, true) end
+            return
         end
+        if manual then Notify("Sirius Update", "Проверяю GitHub...", 2, true) end
+        local sha = getLatestCommit()
+        if not sha then
+            if manual then Notify("Sirius Update", "GitHub недоступен или executor заблокировал HTTP-запрос.", 4, true) end
+            return
+        end
+        latestCommit = sha
+        local state = readUpdateState()
+        if type(state.lastSeenCommit) ~= "string" then
+            saveUpdateState(sha)
+            if manual then Notify("Sirius Update", "Не найден сохранённый номер версии. Текущий коммит записан.", 4, true) end
+            return
+        end
+        if state.lastSeenCommit ~= sha then
+            if manual then Notify("Sirius Update", "Найдена новая версия!", 2, true) end
+            showUpdateDialog(sha)
+        elseif manual then
+            Notify("Sirius Update", "У тебя установлена последняя версия.", 3, true)
+        end
+    end
 
+    if getgenv then getgenv().SiriusCheckUpdates = function() checkForUpdates(true) end end
+
+    task.spawn(function()
+        checkForUpdates(false)
         while ScreenGui.Parent do
             task.wait(120)
             if not ScreenGui.Parent then break end
