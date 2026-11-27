@@ -5131,8 +5131,71 @@ MiscTab:Toggle("Уведомление при входе игрока", false, f
 end)
 OnUnload(function() if MiscTabJoinConn then MiscTabJoinConn:Disconnect() end end)
 
+-- Цветовые режимы акцента: однотонный, радужный и пользовательский градиент.
+local accentMode = Config.AccentMode or "solid"
+local gradientA = Config.GradientA or {0, 0, 0}
+local gradientB = Config.GradientB or {255, 255, 255}
+local gradientSpeed = tonumber(Config.GradientSpeed) or 0.25
+local gradientClock = 0
+local function colorFromRGB(t)
+    return Color3.fromRGB(
+        math.clamp(tonumber(t[1]) or 0, 0, 255),
+        math.clamp(tonumber(t[2]) or 0, 0, 255),
+        math.clamp(tonumber(t[3]) or 0, 0, 255)
+    )
+end
+local function parseHexColor(value)
+    local hex = tostring(value or ""):gsub("#", ""):gsub("%s", "")
+    if #hex ~= 6 or not hex:match("^%x%x%x%x%x%x$") then return nil end
+    return Color3.fromRGB(tonumber(hex:sub(1,2),16), tonumber(hex:sub(3,4),16), tonumber(hex:sub(5,6),16))
+end
+local function applyAccentDirect(color)
+    Theme.Accent = color
+    for i = #AccentObjects, 1, -1 do
+        local o = AccentObjects[i]
+        if o[1] and o[1].Parent then o[1][o[2]] = color else table.remove(AccentObjects, i) end
+    end
+    for _, tab in pairs(Tabs) do tab.Page.ScrollBarImageColor3 = color end
+    for _, toggle in ipairs(Toggles) do toggle.Render() end
+end
+MiscTab:Section("Кастомизация оформления")
+MiscTab:Button("Режим акцента: " .. tostring(accentMode), function()
+    local modes = {"solid", "rainbow", "gradient"}
+    local index = table.find(modes, accentMode) or 1
+    accentMode = modes[index % #modes + 1]
+    Config.AccentMode = accentMode
+    SaveConfig()
+    Notify("Оформление", "Режим: " .. accentMode, 2)
+end)
+local gradABox = MiscTab:Input("Первый цвет градиента (#RRGGBB)", "#000000", function(t)
+    local c = parseHexColor(t)
+    if c then gradientA = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)} Config.GradientA = gradientA SaveConfig() end
+end)
+local gradBBox = MiscTab:Input("Второй цвет градиента (#RRGGBB)", "#FFFFFF", function(t)
+    local c = parseHexColor(t)
+    if c then gradientB = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)} Config.GradientB = gradientB SaveConfig() end
+end)
+MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed, function(v)
+    gradientSpeed = v Config.GradientSpeed = v SaveConfig()
+end, 2)
+local gradientConn
+gradientConn = RunService.Heartbeat:Connect(function(dt)
+    if accentMode == "solid" then return end
+    gradientClock += dt * gradientSpeed
+    local alpha = (math.sin(gradientClock) + 1) * 0.5
+    local color
+    if accentMode == "rainbow" then
+        color = Color3.fromHSV((gradientClock * 0.12) % 1, 0.8, 1)
+    else
+        color = colorFromRGB(gradientA):Lerp(colorFromRGB(gradientB), alpha)
+    end
+    applyAccentDirect(color)
+end)
+OnUnload(function() if gradientConn then gradientConn:Disconnect() end end)
 MiscTab:Button("Случайный цвет интерфейса", function()
     local color = Color3.fromHSV(math.random(), 0.7, 1)
+    accentMode = "solid"
+    Config.AccentMode = "solid"
     ApplyAccent(color, true)
 end)
 MiscTab:Label("Инструменты этой вкладки работают локально и не меняют состояние других игроков.")
@@ -5554,10 +5617,18 @@ PlayerTab:Button("Случайный цвет тела", function()
     Notify("Персонаж", "Цвет тела изменён", 2)
 end)
 
--- Rainbow тело
+-- Радужное тело: сохраняем исходный цвет каждого BasePart и возвращаем его при выключении.
 local rainbowBodyConn
-PlayerTab:Toggle("Радужное тело (анимация)", false, function(on)
+local rainbowBodySaved = {}
+local function restoreRainbowBody()
     if rainbowBodyConn then rainbowBodyConn:Disconnect() rainbowBodyConn = nil end
+    for part, originalColor in pairs(rainbowBodySaved) do
+        if part and part.Parent then pcall(function() part.Color = originalColor end) end
+    end
+    table.clear(rainbowBodySaved)
+end
+PlayerTab:Toggle("Радужное тело (анимация)", false, function(on)
+    restoreRainbowBody()
     if not on then return end
     local hue = 0
     rainbowBodyConn = RunService.Heartbeat:Connect(function(dt)
@@ -5566,12 +5637,13 @@ PlayerTab:Toggle("Радужное тело (анимация)", false, function
         if not c then return end
         for _, p in ipairs(c:GetDescendants()) do
             if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+                if rainbowBodySaved[p] == nil then rainbowBodySaved[p] = p.Color end
                 p.Color = Color3.fromHSV(hue, 0.9, 0.95)
             end
         end
     end)
 end)
-OnUnload(function() if rainbowBodyConn then rainbowBodyConn:Disconnect() end end)
+OnUnload(restoreRainbowBody)
 
 -- Невидимое тело (только свой персонаж)
 local invisConn
@@ -5599,72 +5671,75 @@ PlayerTab:Toggle("Невидимый (тело, локально)", false, funct
 end)
 OnUnload(function() if invisConn then invisConn:Disconnect() end end)
 
--- Размер персонажа
+-- Масштабирование R15: размер тела и головы управляются независимо.
+-- R6 не содержит стандартных NumberValue-масштабов, поэтому там эти ползунки не поддерживаются.
 local sizeConn, charScale = nil, 1
+local bodyScaleEnabled = false
+local function getScaleValues(h)
+    if not h then return nil end
+    local depth = h:FindFirstChild("BodyDepthScale")
+    local height = h:FindFirstChild("BodyHeightScale")
+    local width = h:FindFirstChild("BodyWidthScale")
+    local head = h:FindFirstChild("HeadScale")
+    if not (depth and height and width and head) then return nil end
+    return depth, height, width, head
+end
+local function applyBodyScale()
+    local h = GetHum()
+    local depth, height, width = getScaleValues(h)
+    if depth then
+        depth.Value, height.Value, width.Value = charScale, charScale, charScale
+    end
+end
 PlayerTab:Toggle("Кастомный размер персонажа", false, function(on)
+    bodyScaleEnabled = on
     if sizeConn then sizeConn:Disconnect() sizeConn = nil end
     if not on then
-        local c = GetChar()
-        if c then
-            local h = c:FindFirstChildOfClass("Humanoid")
-            if h then
-                h.BodyDepthScale.Value  = 1
-                h.BodyHeightScale.Value = 1
-                h.BodyWidthScale.Value  = 1
-                h.HeadScale.Value       = 1
-            end
-        end
+        local h = GetHum()
+        local depth, height, width = getScaleValues(h)
+        if depth then depth.Value, height.Value, width.Value = 1, 1, 1 end
         return
     end
-    sizeConn = RunService.Heartbeat:Connect(function()
-        local c = GetChar()
-        if not c then return end
-        local h = c:FindFirstChildOfClass("Humanoid")
-        if not h then return end
-        h.BodyDepthScale.Value  = charScale
-        h.BodyHeightScale.Value = charScale
-        h.BodyWidthScale.Value  = charScale
-        h.HeadScale.Value       = charScale
-    end)
+    sizeConn = RunService.Heartbeat:Connect(applyBodyScale)
+    applyBodyScale()
+    if not getScaleValues(GetHum()) then
+        Notify("Размер персонажа", "Нужен R15-аватар с поддержкой масштабов", 3, true)
+    end
 end)
 OnUnload(function()
     if sizeConn then sizeConn:Disconnect() end
-    local c = GetChar()
-    if c then
-        local h = c:FindFirstChildOfClass("Humanoid")
-        if h then
-            h.BodyDepthScale.Value, h.BodyHeightScale.Value = 1, 1
-            h.BodyWidthScale.Value, h.HeadScale.Value       = 1, 1
-        end
-    end
+    local h = GetHum()
+    local depth, height, width = getScaleValues(h)
+    if depth then depth.Value, height.Value, width.Value = 1, 1, 1 end
 end)
-PlayerTab:Slider("Размер персонажа", 0.1, 5, 1, function(v) charScale = v end, 1)
+PlayerTab:Slider("Размер персонажа", 0.5, 2, 1, function(v) charScale = v if bodyScaleEnabled then applyBodyScale() end end, 2)
 
--- Только большая голова
-local bigHeadConn, headScale2 = nil, 2
-PlayerTab:Toggle("Большая голова", false, function(on)
+local bigHeadConn, headScale2 = nil, 1
+local bigHeadEnabled = false
+local function applyHeadScale()
+    local values = {getScaleValues(GetHum())}
+    if values[4] then values[4].Value = headScale2 end
+end
+PlayerTab:Toggle("Кастомный размер головы", false, function(on)
+    bigHeadEnabled = on
     if bigHeadConn then bigHeadConn:Disconnect() bigHeadConn = nil end
     if not on then
-        local c = GetChar()
-        if c then
-            local h = c:FindFirstChildOfClass("Humanoid")
-            if h then h.HeadScale.Value = 1 end
-        end
+        local values = {getScaleValues(GetHum())}
+        if values[4] then values[4].Value = 1 end
         return
     end
-    bigHeadConn = RunService.Heartbeat:Connect(function()
-        local c = GetChar()
-        local h = c and c:FindFirstChildOfClass("Humanoid")
-        if h then h.HeadScale.Value = headScale2 end
-    end)
+    bigHeadConn = RunService.Heartbeat:Connect(applyHeadScale)
+    applyHeadScale()
+    if not getScaleValues(GetHum()) then
+        Notify("Размер головы", "Нужен R15-аватар с поддержкой масштабов", 3, true)
+    end
 end)
 OnUnload(function()
     if bigHeadConn then bigHeadConn:Disconnect() end
-    local c = GetChar()
-    local h = c and c:FindFirstChildOfClass("Humanoid")
-    if h then h.HeadScale.Value = 1 end
+    local values = {getScaleValues(GetHum())}
+    if values[4] then values[4].Value = 1 end
 end)
-PlayerTab:Slider("Размер головы", 0.5, 8, 2, function(v) headScale2 = v end, 1)
+PlayerTab:Slider("Размер головы", 0.5, 3, 1, function(v) headScale2 = v if bigHeadEnabled then applyHeadScale() end end, 2)
 
 -- Хитбокс персонажа (HumanoidRootPart)
 local hbSaved
@@ -5789,17 +5864,23 @@ OnUnload(function() if camOffConn then camOffConn:Disconnect() end end)
 PlayerTab:Slider("Смещение X", -5, 5, 0, function(v) camOffX = v end, 1)
 PlayerTab:Slider("Смещение Y", -5, 5, 0, function(v) camOffY = v end, 1)
 
--- Плечо камеры (лево/право как в шутерах)
-local shoulderConn, shoulderSide = nil, 1.5
+-- Смещение плеча применяем после обновления штатной камеры и от исходной позиции кадра.
+local shoulderEnabled, shoulderSide = false, 1.5
 PlayerTab:Toggle("Камера через плечо (TPS)", false, function(on)
-    if shoulderConn then shoulderConn:Disconnect() shoulderConn = nil end
-    if not on then return end
-    shoulderConn = RunService.RenderStepped:Connect(function()
-        local cam = workspace.CurrentCamera
-        cam.CFrame = cam.CFrame * CFrame.new(shoulderSide, 0, 0)
-    end)
+    shoulderEnabled = on
 end)
-OnUnload(function() if shoulderConn then shoulderConn:Disconnect() end end)
+RunService:BindToRenderStep("SiriusShoulderCamera", Enum.RenderPriority.Camera.Value + 1, function()
+    if not shoulderEnabled then return end
+    local cam = workspace.CurrentCamera
+    if cam then
+        local base = cam.CFrame
+        cam.CFrame = base + base.RightVector * shoulderSide
+    end
+end)
+OnUnload(function()
+    shoulderEnabled = false
+    pcall(function() RunService:UnbindFromRenderStep("SiriusShoulderCamera") end)
+end)
 PlayerTab:Slider("Смещение плеча", -4, 4, 1.5, function(v) shoulderSide = v end, 1)
 
 PlayerTab:Section("Статистика и инфо")
@@ -5885,7 +5966,7 @@ end)
 
 PlayerTab:Section("Быстрые действия")
 
--- Авто-ресет при застревании
+-- Авто-ресет только если игрок действительно пытался двигаться, но позиция не менялась.
 local stuckConn, stuckPos, stuckTimer = nil, nil, 0
 PlayerTab:Toggle("Авто-ресет при застревании (5 сек)", false, function(on)
     if stuckConn then stuckConn:Disconnect() stuckConn = nil end
@@ -5894,13 +5975,20 @@ PlayerTab:Toggle("Авто-ресет при застревании (5 сек)",
     stuckConn = RunService.Heartbeat:Connect(function(dt)
         local r, h = GetRoot(), GetHum()
         if not (r and h) or h.Health <= 0 then return end
+        local movingInput = h.MoveDirection.Magnitude > 0.12
+        local velocity = Vector3.new(r.AssemblyLinearVelocity.X, 0, r.AssemblyLinearVelocity.Z).Magnitude
+        if not movingInput and velocity < 0.8 then
+            stuckPos, stuckTimer = r.Position, 0
+            return
+        end
         local pos = r.Position
-        if stuckPos and (pos - stuckPos).Magnitude < 1 then
+        if stuckPos and (pos - stuckPos).Magnitude < 0.12 then
             stuckTimer += dt
             if stuckTimer >= 5 then
                 stuckTimer = 0
+                stuckPos = pos
                 h.Health = 0
-                Notify("Авто-ресет", "Застрял — перезапуск", 2)
+                Notify("Авто-ресет", "Движение заблокировано 5 секунд — перезапуск", 2)
             end
         else
             stuckPos, stuckTimer = pos, 0
@@ -6198,21 +6286,23 @@ for _, e in ipairs(EMOTES) do
     end)
 end
 
--- Поле для своей анимации
+-- Для Asset ID и имени эмоции предусмотрены отдельные поля ввода.
 PlayerTab:Section("Своя анимация (Asset ID)")
-local customEmoteId = ""
-PlayerTab:Input("Asset ID анимации", "507770239", function(t) customEmoteId = t end)
+local customEmoteId, customEmoteName = "", ""
+PlayerTab:Input("Asset ID анимации", "Например: 507770239", function(t) customEmoteId = (t or ""):match("^%s*(.-)%s*$") end)
 PlayerTab:Button("▶ Сыграть свою анимацию", function()
     if customEmoteId == "" then error("введи Asset ID", 0) end
     local id = customEmoteId
-    if not id:find("rbxassetid://") then id = "rbxassetid://" .. id end
-    playEmoteById(id)
-    Notify("Анимация", "Asset ID: " .. customEmoteId, 2)
+    if not id:find("rbxassetid://", 1, true) then id = "rbxassetid://" .. id end
+    local ok, result = pcall(playEmoteById, id)
+    if not ok then error("Не удалось запустить анимацию: " .. tostring(result), 0) end
+    Notify("Анимация", "Запущен Asset ID: " .. customEmoteId, 2)
 end)
+PlayerTab:Input("Имя эмоции (/e)", "Например: wave или dance", function(t) customEmoteName = (t or ""):match("^%s*(.-)%s*$") end)
 PlayerTab:Button("▶ Сыграть по имени (/e ...)", function()
-    if customEmoteId == "" then error("введи имя эмоции", 0) end
-    playEmoteByName(customEmoteId)
-    Notify("Эмоция", "/e " .. customEmoteId, 2)
+    if customEmoteName == "" then error("введи имя эмоции в отдельное поле", 0) end
+    playEmoteByName(customEmoteName)
+    Notify("Эмоция", "/e " .. customEmoteName, 2)
 end)
 
 -- Скорость своей анимации
@@ -6399,9 +6489,18 @@ local zoomSaved
 UtilTab:Toggle("Снять лимит зума камеры", false, function(on)
     if on then
         zoomSaved = {LocalPlayer.CameraMaxZoomDistance, LocalPlayer.CameraMinZoomDistance}
-        LocalPlayer.CameraMaxZoomDistance = 10000
+        -- Roblox ограничивает CameraMaxZoomDistance собственным верхним пределом;
+        -- значение выше 128 движок всё равно не принимает как бесконечный зум.
+        LocalPlayer.CameraMaxZoomDistance = 128
         LocalPlayer.CameraMinZoomDistance = 0
+        Notify("Камера", "Установлен максимальный поддерживаемый Roblox зум (128)", 3)
     elseif zoomSaved then
+        LocalPlayer.CameraMaxZoomDistance, LocalPlayer.CameraMinZoomDistance = zoomSaved[1], zoomSaved[2]
+        zoomSaved = nil
+    end
+end)
+OnUnload(function()
+    if zoomSaved then
         LocalPlayer.CameraMaxZoomDistance, LocalPlayer.CameraMinZoomDistance = zoomSaved[1], zoomSaved[2]
         zoomSaved = nil
     end
