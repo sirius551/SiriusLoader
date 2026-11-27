@@ -4932,9 +4932,61 @@ MiscTab:Button("Скопировать список игроков", function()
 end)
 
 MiscTab:Section("Локальные настройки")
-local miscClockGui, miscClockConn
+-- Draggable HUD widgets. Positions are kept for this session and can be moved
+-- with mouse or touch while the main menu remains open.
+local function MakeHudDraggable(gui)
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPosition = nil
+    local inputBeganConn, inputChangedConn, globalChangedConn, inputEndedConn
+
+    inputBeganConn = gui.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = gui.Position
+            dragInput = input
+        end
+    end)
+
+    inputChangedConn = gui.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    globalChangedConn = UIS.InputChanged:Connect(function(input)
+        if dragging and input == dragInput and dragStart and startPosition then
+            local delta = input.Position - dragStart
+            gui.Position = UDim2.new(
+                startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    inputEndedConn = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            dragInput = nil
+        end
+    end)
+
+    return function()
+        for _, conn in ipairs({inputBeganConn, inputChangedConn, globalChangedConn, inputEndedConn}) do
+            if conn then conn:Disconnect() end
+        end
+    end
+end
+
+local miscClockGui, miscClockConn, miscClockDragCleanup
 MiscTab:Toggle("Часы на экране", false, function(on)
     if miscClockConn then miscClockConn:Disconnect() miscClockConn = nil end
+    if miscClockDragCleanup then miscClockDragCleanup() miscClockDragCleanup = nil end
     if miscClockGui then miscClockGui:Destroy() miscClockGui = nil end
     if not on then return end
     miscClockGui = New("TextLabel", {
@@ -4942,20 +4994,27 @@ MiscTab:Toggle("Часы на экране", false, function(on)
         TextColor3 = Theme.Text, Font = Enum.Font.GothamBold, TextSize = 14,
         AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 12),
         Size = UDim2.new(0, 180, 0, 32), ZIndex = 60,
+        Active = true, Selectable = true,
     }, ScreenGui)
     Round(miscClockGui, 8)
+    miscClockDragCleanup = MakeHudDraggable(miscClockGui)
     miscClockConn = RunService.RenderStepped:Connect(function()
-        if miscClockGui then miscClockGui.Text = (function() local t=os.time() return string.format("%02d:%02d:%02d",math.floor(t/3600)%24,math.floor(t/60)%60,t%60) end)() end
+        if miscClockGui then
+            local t = os.date("*t")
+            miscClockGui.Text = string.format("%02d:%02d:%02d  ⋮ перетащи", t.hour, t.min, t.sec)
+        end
     end)
 end)
 OnUnload(function()
     if miscClockConn then miscClockConn:Disconnect() end
+    if miscClockDragCleanup then miscClockDragCleanup() end
     if miscClockGui then miscClockGui:Destroy() end
 end)
 
-local miscCoordsGui, miscCoordsConn
+local miscCoordsGui, miscCoordsConn, miscCoordsDragCleanup
 MiscTab:Toggle("Координаты на экране", false, function(on)
     if miscCoordsConn then miscCoordsConn:Disconnect() miscCoordsConn = nil end
+    if miscCoordsDragCleanup then miscCoordsDragCleanup() miscCoordsDragCleanup = nil end
     if miscCoordsGui then miscCoordsGui:Destroy() miscCoordsGui = nil end
     if not on then return end
     miscCoordsGui = New("TextLabel", {
@@ -4963,19 +5022,65 @@ MiscTab:Toggle("Координаты на экране", false, function(on)
         TextColor3 = Theme.Text, Font = Enum.Font.Gotham, TextSize = 13,
         AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 50),
         Size = UDim2.new(0, 230, 0, 30), ZIndex = 60,
+        Active = true, Selectable = true,
     }, ScreenGui)
     Round(miscCoordsGui, 8)
+    miscCoordsDragCleanup = MakeHudDraggable(miscCoordsGui)
     miscCoordsConn = RunService.RenderStepped:Connect(function()
         local root = GetRoot()
         if root and miscCoordsGui then
             local p = root.Position
-            miscCoordsGui.Text = string.format("X %.1f | Y %.1f | Z %.1f", p.X, p.Y, p.Z)
+            miscCoordsGui.Text = string.format("X %.1f | Y %.1f | Z %.1f  ⋮", p.X, p.Y, p.Z)
         end
     end)
 end)
 OnUnload(function()
     if miscCoordsConn then miscCoordsConn:Disconnect() end
+    if miscCoordsDragCleanup then miscCoordsDragCleanup() end
     if miscCoordsGui then miscCoordsGui:Destroy() end
+end)
+
+local miscPerfGui, miscPerfConn, miscPerfDragCleanup
+MiscTab:Toggle("Мониторинг FPS и Ping", false, function(on)
+    if miscPerfConn then miscPerfConn:Disconnect() miscPerfConn = nil end
+    if miscPerfDragCleanup then miscPerfDragCleanup() miscPerfDragCleanup = nil end
+    if miscPerfGui then miscPerfGui:Destroy() miscPerfGui = nil end
+    if not on then return end
+
+    miscPerfGui = New("TextLabel", {
+        Name = "SiriusLoaderPerformance", BackgroundColor3 = Theme.Top, BackgroundTransparency = 0.15,
+        TextColor3 = Theme.Text, Font = Enum.Font.GothamBold, TextSize = 13,
+        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 88),
+        Size = UDim2.new(0, 210, 0, 32), ZIndex = 60,
+        Active = true, Selectable = true,
+    }, ScreenGui)
+    Round(miscPerfGui, 8)
+    miscPerfDragCleanup = MakeHudDraggable(miscPerfGui)
+
+    local frames, elapsed, fps, refresh = 0, 0, 0, 0
+    miscPerfConn = RunService.RenderStepped:Connect(function(dt)
+        frames += 1
+        elapsed += dt
+        refresh += dt
+        if elapsed >= 0.75 then
+            fps = math.floor(frames / elapsed + 0.5)
+            frames, elapsed = 0, 0
+        end
+        if refresh < 0.25 then return end
+        refresh = 0
+        local ping = "--"
+        pcall(function()
+            ping = tostring(math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5))
+        end)
+        if miscPerfGui then
+            miscPerfGui.Text = string.format("FPS %d  |  Ping %s ms  ⋮", fps, ping)
+        end
+    end)
+end)
+OnUnload(function()
+    if miscPerfConn then miscPerfConn:Disconnect() end
+    if miscPerfDragCleanup then miscPerfDragCleanup() end
+    if miscPerfGui then miscPerfGui:Destroy() end
 end)
 
 MiscTab:Toggle("Уведомление при входе игрока", false, function(on)
