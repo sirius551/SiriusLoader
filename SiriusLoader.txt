@@ -3744,6 +3744,50 @@ local function VFXUpdatePlayerOverlay()
     end
 end
 
+-- Orbit Ring updates every rendered frame, independently from throttled overlay effects.
+local orbitClock = 0
+table.insert(VFXConns, RunService.RenderStepped:Connect(function(dt)
+    local root = GetRoot()
+    local orbit = VFXEffects.OrbitParts
+
+    if not VFX.OrbitRing or not root or not root.Parent then
+        if orbit then
+            for _, part in ipairs(orbit) do
+                if part and part.Parent then part:Destroy() end
+            end
+            VFXEffects.OrbitParts = nil
+        end
+        return
+    end
+
+    if not orbit then
+        orbit = {}
+        for i = 1, 24 do
+            orbit[i] = New("Part", {
+                Name = "SiriusLoader_Orbit", Shape = Enum.PartType.Ball,
+                Size = Vector3.new(0.22, 0.22, 0.22), Material = Enum.Material.Neon,
+                Color = Theme.Accent, Anchored = true, CanCollide = false,
+                CanTouch = false, CanQuery = false, CastShadow = false,
+            }, workspace)
+        end
+        VFXEffects.OrbitParts = orbit
+    end
+
+    orbitClock += math.min(dt, 0.05)
+    local center = root.Position
+    for i, part in ipairs(orbit) do
+        if part and part.Parent then
+            local angle = orbitClock * 1.6 + (i - 1) / #orbit * math.pi * 2
+            local offset = Vector3.new(
+                math.cos(angle) * 3.5,
+                1.2 + math.sin(angle * 2) * 0.35,
+                math.sin(angle) * 3.5
+            )
+            part.CFrame = CFrame.new(center + offset)
+        end
+    end
+end))
+
 table.insert(VFXConns, RunService.RenderStepped:Connect(function()
     if tick() - VFXLastStep < 0.025 then return end
     VFXLastStep = tick()
@@ -3764,29 +3808,6 @@ table.insert(VFXConns, RunService.RenderStepped:Connect(function()
             end
             aura.CFrame = root.CFrame
         elseif aura then aura:Destroy() VFXEffects.LocalAuraPart = nil end
-
-        local orbit = VFXEffects.OrbitParts
-        if VFX.OrbitRing then
-            if not orbit then
-                orbit = {}
-                for i = 1, 24 do
-                    orbit[i] = New("Part", {
-                        Name = "SiriusLoader_Orbit", Shape = Enum.PartType.Ball,
-                        Size = Vector3.new(0.22, 0.22, 0.22), Material = Enum.Material.Neon,
-                        Color = Theme.Accent, Anchored = true, CanCollide = false,
-                        CanTouch = false, CanQuery = false,
-                    }, workspace)
-                end
-                VFXEffects.OrbitParts = orbit
-            end
-            for i, p in ipairs(orbit) do
-                local a = t * 1.6 + i / #orbit * math.pi * 2
-                p.Position = root.Position + Vector3.new(math.cos(a) * 3.5, 1.2 + math.sin(a * 2) * 0.35, math.sin(a) * 3.5)
-            end
-        elseif orbit then
-            for _, p in ipairs(orbit) do p:Destroy() end
-            VFXEffects.OrbitParts = nil
-        end
 
         if VFX.FootstepRings and root.AssemblyLinearVelocity.Magnitude > 2 and math.random() < 0.08 then
             VFXMakeRing(root.Position - Vector3.new(0, 2.8, 0), 1.1, Theme.Accent, 0.45, 0.08)
