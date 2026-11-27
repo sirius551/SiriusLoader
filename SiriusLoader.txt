@@ -9352,14 +9352,30 @@ end))
 do
     local req = (syn and syn.request) or (http and http.request) or http_request or request
     local token, baseUrl
+    local tokenFile, urlFile = "Sirius_MCP_Token.txt", "Sirius_MCP_URL.txt"
+    local defaultMcpUrl = "https://sirius-mcp.onrender.com/mcp"
+    local urlWriteError
+
+    -- Relative executor file paths resolve in the executor workspace/root.
     pcall(function()
-        if readfile and isfile and isfile("Sirius_MCP_Token.txt") then
-            token = (readfile("Sirius_MCP_Token.txt") or ""):gsub("%s+", "")
-        end
-        if readfile and isfile and isfile("Sirius_MCP_URL.txt") then
-            baseUrl = (readfile("Sirius_MCP_URL.txt") or ""):gsub("%s+", ""):gsub("/+$", "")
+        if type(readfile) == "function" and type(isfile) == "function" and isfile(tokenFile) then
+            token = (readfile(tokenFile) or ""):gsub("%s+", "")
         end
     end)
+    pcall(function()
+        if type(readfile) == "function" and type(isfile) == "function" and isfile(urlFile) then
+            baseUrl = (readfile(urlFile) or ""):gsub("%s+", ""):gsub("/+$", "")
+        end
+    end)
+
+    -- The server URL is public configuration and can be safely created automatically.
+    if type(baseUrl) ~= "string" or not baseUrl:match("^https://") then
+        baseUrl = defaultMcpUrl
+        if type(writefile) == "function" then
+            local ok, err = pcall(writefile, urlFile, defaultMcpUrl)
+            if not ok then urlWriteError = tostring(err) end
+        end
+    end
 
     UtilTab:Section("Sirius MCP · Облако")
 
@@ -9579,8 +9595,16 @@ do
         table.insert(Cleanups, function() mcpRunning = false end)
         Notify("Sirius MCP", "Облачный мост активен", 3)
     else
-        UtilTab:Label("MCP не настроен: нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
-        warn("[Sirius MCP] Нужны HTTP request API, readfile, Sirius_MCP_Token.txt и HTTPS-адрес в Sirius_MCP_URL.txt.")
+        if type(req) ~= "function" then
+            UtilTab:Label("MCP: executor не предоставляет HTTP request API.")
+            warn("[Sirius MCP] HTTP request API is unavailable.")
+        elseif type(token) ~= "string" or #token < 32 then
+            UtilTab:Label("MCP: не найден Sirius_MCP_Token.txt в workspace executor. Запусти установщик и дождись копирования токена.")
+            warn("[Sirius MCP] Token file missing or invalid in executor workspace.")
+        else
+            UtilTab:Label("MCP: конфигурация URL недоступна. Создай Sirius_MCP_URL.txt с HTTPS-адресом сервера.")
+        end
+        if urlWriteError then warn("[Sirius MCP] Could not create URL config: " .. urlWriteError) end
     end
 end
 
