@@ -5149,6 +5149,28 @@ local function parseHexColor(value)
     if #hex ~= 6 or not hex:match("^%x%x%x%x%x%x$") then return nil end
     return Color3.fromRGB(tonumber(hex:sub(1,2),16), tonumber(hex:sub(3,4),16), tonumber(hex:sub(5,6),16))
 end
+local function updateAccentGradients(colorA, colorB, remove)
+    for i = #AccentObjects, 1, -1 do
+        local inst = AccentObjects[i][1]
+        if inst and inst.Parent then
+            if inst:IsA("GuiObject") then
+                local grad = inst:FindFirstChild("SiriusAccentGradient")
+                if remove then
+                    if grad then grad:Destroy() end
+                else
+                    if not grad then
+                        grad = Instance.new("UIGradient")
+                        grad.Name = "SiriusAccentGradient"
+                        grad.Parent = inst
+                    end
+                    grad.Color = ColorSequence.new(colorA, colorB)
+                end
+            end
+        else
+            table.remove(AccentObjects, i)
+        end
+    end
+end
 local function applyAccentDirect(color)
     Theme.Accent = color
     for i = #AccentObjects, 1, -1 do
@@ -5164,38 +5186,55 @@ MiscTab:Button("Режим акцента: " .. tostring(accentMode), function()
     local index = table.find(modes, accentMode) or 1
     accentMode = modes[index % #modes + 1]
     Config.AccentMode = accentMode
+    refreshAccentMode()
     SaveConfig()
     Notify("Оформление", "Режим: " .. accentMode, 2)
 end)
 local gradABox = MiscTab:Input("Первый цвет градиента (#RRGGBB)", "#000000", function(t)
     local c = parseHexColor(t)
-    if c then gradientA = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)} Config.GradientA = gradientA SaveConfig() end
+    if c then
+        gradientA = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
+        Config.GradientA = gradientA
+        if accentMode == "gradient" then refreshAccentMode() end
+        SaveConfig()
+    end
 end)
 local gradBBox = MiscTab:Input("Второй цвет градиента (#RRGGBB)", "#FFFFFF", function(t)
     local c = parseHexColor(t)
-    if c then gradientB = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)} Config.GradientB = gradientB SaveConfig() end
+    if c then
+        gradientB = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
+        Config.GradientB = gradientB
+        if accentMode == "gradient" then refreshAccentMode() end
+        SaveConfig()
+    end
 end)
 MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed, function(v)
     gradientSpeed = v Config.GradientSpeed = v SaveConfig()
 end, 2)
 local gradientConn
-gradientConn = RunService.Heartbeat:Connect(function(dt)
-    if accentMode == "solid" then return end
-    gradientClock += dt * gradientSpeed
-    local alpha = (math.sin(gradientClock) + 1) * 0.5
-    local color
-    if accentMode == "rainbow" then
-        color = Color3.fromHSV((gradientClock * 0.12) % 1, 0.8, 1)
-    else
-        color = colorFromRGB(gradientA):Lerp(colorFromRGB(gradientB), alpha)
+local function refreshAccentMode()
+    if accentMode == "solid" then
+        updateAccentGradients(nil, nil, true)
+        return
     end
-    applyAccentDirect(color)
+    if accentMode == "gradient" then
+        updateAccentGradients(colorFromRGB(gradientA), colorFromRGB(gradientB), false)
+    end
+end
+refreshAccentMode()
+gradientConn = RunService.Heartbeat:Connect(function(dt)
+    if accentMode == "rainbow" then
+        gradientClock += dt * gradientSpeed
+        local hue = (gradientClock * 0.12) % 1
+        updateAccentGradients(Color3.fromHSV(hue, 0.85, 1), Color3.fromHSV((hue + 0.22) % 1, 0.85, 1), false)
+    end
 end)
 OnUnload(function() if gradientConn then gradientConn:Disconnect() end end)
 MiscTab:Button("Случайный цвет интерфейса", function()
     local color = Color3.fromHSV(math.random(), 0.7, 1)
     accentMode = "solid"
     Config.AccentMode = "solid"
+    refreshAccentMode()
     ApplyAccent(color, true)
 end)
 MiscTab:Label("Инструменты этой вкладки работают локально и не меняют состояние других игроков.")
