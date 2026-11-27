@@ -3381,28 +3381,43 @@ end)
 OnUnload(StopAutoWalk)
 
 local circleAngle = 0
+local circleRadius = 8
+local circleAngularSpeed = 2
 local function StopCircleMove()
     pcall(function() RunService:UnbindFromRenderStep(CIRCLE_MOVE_STEP) end)
+    local h = GetHum()
+    if h then h:Move(Vector3.zero, false) end
 end
 
 MoveTab:Toggle("Круговое движение", false, function(on)
     StopCircleMove()
     circleAngle = 0
-    if not on then
-        local h = GetHum()
-        if h then h:Move(Vector3.zero, false) end
-        return
-    end
+    if not on then return end
+
+    local center = GetRoot() and GetRoot().Position
+    if not center then return end
 
     RunService:BindToRenderStep(CIRCLE_MOVE_STEP, Enum.RenderPriority.Character.Value + 1, function(dt)
-        local h = GetHum()
-        if not h then return end
+        local h, root = GetHum(), GetRoot()
+        if not (h and root and h.Health > 0) then return end
 
-        -- Поворачиваем вектор движения в горизонтальной плоскости.
-        circleAngle = (circleAngle + math.clamp(dt or 0, 0, 0.1) * 2) % (math.pi * 2)
-        h:Move(Vector3.new(math.cos(circleAngle), 0, math.sin(circleAngle)), false)
+        circleAngle = (circleAngle + math.clamp(dt or 0, 0, 0.1) * circleAngularSpeed) % (math.pi * 2)
+        local nextPosition = center + Vector3.new(
+            math.cos(circleAngle) * circleRadius,
+            0,
+            math.sin(circleAngle) * circleRadius
+        )
+        local offset = nextPosition - root.Position
+        local direction = Vector3.new(offset.X, 0, offset.Z)
+        if direction.Magnitude > 0.001 then
+            h:Move(direction.Unit, false)
+        else
+            h:Move(Vector3.zero, false)
+        end
     end)
 end)
+MoveTab:Slider("Радиус кругового движения", 2, 40, 8, function(v) circleRadius = v end)
+MoveTab:Slider("Скорость кругового движения", 0.2, 8, 2, function(v) circleAngularSpeed = v end)
 OnUnload(StopCircleMove)
 
 MoveTab:Section("Трюки с физикой")
@@ -3439,24 +3454,49 @@ MoveTab:Toggle("Glide (планирование в воздухе)", false, func
 end)
 OnUnload(function() if glideConn then glideConn:Disconnect() end end)
 
-local jetConn, jetActive = nil, false
-MoveTab:Toggle("Jetpack (держи Space в воздухе)", false, function(on)
+local jetConn, jetCharacterConn = nil, nil
+local jetForce = 55
+local jetEnabled = false
+local function StopJetpack()
+    jetEnabled = false
     if jetConn then jetConn:Disconnect() jetConn = nil end
+    if jetCharacterConn then jetCharacterConn:Disconnect() jetCharacterConn = nil end
+end
+
+MoveTab:Toggle("Jetpack (держи Space в воздухе)", false, function(on)
+    StopJetpack()
     if not on then return end
+    jetEnabled = true
+
     jetConn = RunService.Heartbeat:Connect(function(dt)
-        local h, r = GetHum(), GetRoot()
-        if not (h and r) then return end
+        local h, root = GetHum(), GetRoot()
+        if not (h and root and h.Health > 0) then return end
+
         local inAir = h.FloorMaterial == Enum.Material.Air
-        local jumping = isMobile
-            and (h:GetState() == Enum.HumanoidStateType.Jumping or h:GetState() == Enum.HumanoidStateType.FreeFalling)
-            or (UIS:IsKeyDown(Enum.KeyCode.Space) and not UIS:GetFocusedTextBox())
-        if inAir and jumping then
-            local v = r.AssemblyLinearVelocity
-            r.AssemblyLinearVelocity = Vector3.new(v.X, math.min(v.Y + 60*dt, 50), v.Z)
+        local jumpHeld = false
+        if isMobile then
+            -- Touch jump is exposed by Humanoid.Jump while the mobile jump input is held.
+            jumpHeld = h.Jump
+        else
+            jumpHeld = UIS:IsKeyDown(Enum.KeyCode.Space) and not UIS:GetFocusedTextBox()
+        end
+
+        if inAir and jumpHeld then
+            local velocity = root.AssemblyLinearVelocity
+            root.AssemblyLinearVelocity = Vector3.new(
+                velocity.X,
+                math.min(velocity.Y + jetForce * math.clamp(dt, 0, 0.05), 45),
+                velocity.Z
+            )
         end
     end)
+
+    jetCharacterConn = LocalPlayer.CharacterAdded:Connect(function()
+        -- Heartbeat resolves GetHum/GetRoot dynamically, so it binds to the new character.
+    end)
 end)
-OnUnload(function() if jetConn then jetConn:Disconnect() end end)
+MoveTab:Slider("Сила Jetpack", 10, 120, 55, function(v) jetForce = v end)
+OnUnload(StopJetpack)
 
 MoveTab:Section("Телепорты и маркеры")
 local markers = {}
@@ -3479,27 +3519,70 @@ MoveTab:Button("📋 Список маркеров", function()
     Notify("Маркеры", #names > 0 and table.concat(names, ", ") or "пусто", 4, true)
 end)
 
-local warpConn, warpTarget = nil, Vector3.new(0, 50, 0)
-MoveTab:Toggle("Warp Loop (мигание на точку и назад)", false, function(on)
+local warpConn, warpEnabled = nil, false
+local warpTarget = Vector3.new(0, 50, 0)
+local warpInterval = 0.25
+local warpPhase = 0
+local warpElapsed = 0
+local warpReturnCFrame = nil
+
+local function StopWarpLoop()
+    warpEnabled = false
+    warpPhase = 0
+    warpElapsed = 0
     if warpConn then warpConn:Disconnect() warpConn = nil end
+    warpReturnCFrame = nil
+end
+
+MoveTab:Input("Координаты Warp X,Y,Z", "X,Y,Z", function(value)
+    local x, y, z = tostring(value):match("^%s*(-?[%d%.]+)%s*,%s*(-?[%d%.]+)%s*,%s*(-?[%d%.]+)%s*$")
+    x, y, z = tonumber(x), tonumber(y), tonumber(z)
+    if x and y and z and math.abs(x) < 100000 and math.abs(y) < 100000 and math.abs(z) < 100000 then
+        warpTarget = Vector3.new(x, y, z)
+    else
+        Notify("Warp Loop", "Введи координаты в формате X,Y,Z", 3, true)
+    end
+end)
+MoveTab:Slider("Интервал Warp Loop (сек)", 0.1, 2, 0.25, function(v)
+    warpInterval = v
+end)
+
+MoveTab:Toggle("Warp Loop (туда и обратно)", false, function(on)
+    StopWarpLoop()
     if not on then return end
-    local r = GetRoot()
-    if r then warpTarget = r.Position + Vector3.new(0, 10, 0) end
-    local frame, interval = 0, 0
+    if not GetRoot() then
+        Notify("Warp Loop", "Персонаж не найден", 3, true)
+        return
+    end
+
+    warpEnabled = true
     warpConn = RunService.Heartbeat:Connect(function(dt)
-        local myR = GetRoot()
-        if not myR then return end
-        interval += dt
-        if interval < 0.13 then return end
-        interval = 0
-        local saved = myR.Position
-        myR.CFrame = CFrame.new(warpTarget)
-        task.defer(function()
-            if myR and myR.Parent then myR.CFrame = CFrame.new(saved) end
-        end)
+        if not warpEnabled then return end
+        local root = GetRoot()
+        if not root then
+            warpReturnCFrame = nil
+            warpPhase = 0
+            return
+        end
+
+        warpElapsed += math.clamp(dt or 0, 0, 0.1)
+        if warpElapsed < warpInterval then return end
+        warpElapsed = 0
+
+        if warpPhase == 0 then
+            warpReturnCFrame = root.CFrame
+            root.CFrame = CFrame.new(warpTarget) * warpReturnCFrame.Rotation
+            warpPhase = 1
+        else
+            if warpReturnCFrame then
+                root.CFrame = warpReturnCFrame
+            end
+            warpReturnCFrame = nil
+            warpPhase = 0
+        end
     end)
 end)
-OnUnload(function() if warpConn then warpConn:Disconnect() end end)
+OnUnload(StopWarpLoop)
 
 MoveTab:Section("Скрипты")
 MoveTab:Script("Fly GUI V3/V4", "https://scriptblox.com/raw/Universal-Script-FLY-GUI-V3-V4-(MOBILE)-230975")
