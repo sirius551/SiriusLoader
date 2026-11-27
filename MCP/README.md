@@ -1,104 +1,92 @@
 # Sirius Loader MCP — Public multi-user edition
 
-Sirius MCP connects a supported MCP client to your own running Sirius Loader instance. Each Loader instance registers separately and receives its own signed device token. Device commands, status, and logs are isolated by that token.
+Публичный облачный мост для Sirius Loader. Каждый экземпляр Loader автоматически получает отдельный подписанный токен устройства. Очереди команд, heartbeat, состояние игрока и журналы изолированы по этому токену.
 
-## Quick start
+## Как устроено
 
-1. Launch **Sirius Loader** in your Roblox executor and wait for device registration to complete.
-2. Make sure the executor supports an HTTP request API and the file APIs used by the Loader. The Loader stores its personal token in `Sirius_MCP_Token.txt` in the executor folder.
-3. In Loader, open **Utility → Sirius MCP · Облако** and start MCP. Review the risk notice and accept it only if you understand the remote-control capabilities.
-4. Download the installer in your preferred language from the links below.
-5. Run the installer, select the MCP clients you want to configure, and click **Install selected / Установить выбранное**.
-6. Fully restart the configured MCP client(s).
-7. In the MCP client, connect to the `sirius-loader` server and use the tools. Start with `sirius_connection_status`, then `sirius_list_controls`.
+1. Loader обращается к публичному `POST /register` при первом запуске.
+2. Сервер выдаёт уникальный токен устройства, подписанный серверным секретом.
+3. Loader сохраняет его в `Sirius_MCP_Token.txt` в папке executor.
+4. Все дальнейшие запросы Loader и MCP используют только этот токен.
+5. Сервер отделяет команды и данные разных токенов.
 
-> Only download installers from the official links in this repository. Do not run a copy sent by an unknown person.
+Общий секрет `SIRIUS_MCP_TOKEN` никогда не помещается в Loader, обфусцированный файл или публичный репозиторий.
 
-## Windows installers
+## Render
 
-Both installers configure the same MCP clients and use the same connection settings. The difference is the language of the installer interface.
+Web Service:
 
-| Language | Download |
-|---|---|
-| Русский | [SiriusMCPInstallerRUS.exe](https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstallerRUS.exe) |
-| English | [SiriusMCPInstallerENG.exe](https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstallerENG.exe) |
+- Repository: `sirius551/asdfjkafdkgjaj`
+- Branch: `public-multitenant` для проверки; после тестов изменения можно перенести в `main`
+- Language: Python 3
+- Region: Singapore
+- Root Directory: `MCP`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
+- Health check path: `/health`
 
-The links above require the matching files to be uploaded as assets to the latest GitHub Release. If a download returns 404, the release asset has not been published yet.
+Environment:
 
-### What the installer does
+- `SIRIUS_MCP_TOKEN`: случайный серверный секрет не короче 32 символов. Это ключ подписи токенов, а не пользовательский токен. Не публикуй его и не отправляй в чат.
+- Render автоматически задаёт `PORT` и `RENDER_EXTERNAL_HOSTNAME`.
 
-- Searches a bounded set of common folders in the current Windows profile for `Sirius_MCP_Token.txt`. It does not search the entire disk or other Windows user profiles.
-- Accepts the token only if it matches the expected `s1.` token format.
-- Lets you browse for the token file manually if automatic discovery does not find it.
-- Detects common client configuration locations and lets you select which clients to configure.
-- Creates a timestamped backup before replacing an existing configuration file.
-- Preserves other server entries in JSON configuration files and replaces only the Sirius section in Codex TOML configuration.
-- Writes a log file named `SiriusMCPInstaller.log` beside the installer.
+Если прежний общий токен попадал в переписку, его нужно заменить на новый секрет в Render Environment. После смены секрета ранее выданные токены устройств станут недействительными. Пользователям нужно удалить локальный `Sirius_MCP_Token.txt` и перезапустить Loader для повторной регистрации.
 
-The installer does not start Sirius Loader, register a device, or install the server on your computer. The Loader performs device registration; the installer configures MCP clients to use the existing cloud endpoint and the token belonging to that Loader.
+## Публичный Loader
 
-### Supported client configuration targets
+Опубликованный Loader использует адрес `https://sirius-mcp.onrender.com`. При первом запуске нужны executor API:
 
-The installer currently includes configuration entries for:
+- HTTP request API: `request`, `http_request`, `http.request` или `syn.request`;
+- `readfile` и `isfile`;
+- `writefile` для сохранения персонального токена.
 
-- Visual Studio Code
-- Cursor
-- Claude Code
-- Gemini CLI
-- Windsurf (legacy Cascade configuration path)
-- Devin Desktop
-- Cline (VS Code extension)
-- Roo Code
-- OpenAI Codex
+Пользователю не нужно вручную создавать токен. Loader вызывает `POST /register`, сохраняет ответ в `Sirius_MCP_Token.txt`, затем использует его в `X-Sirius-Token`. При повторном запуске сохранённый токен используется повторно.
 
-Client configuration paths and supported fields can vary between application versions. Check the client documentation if its configuration format has changed.
+Регистрация ограничена пятью запросами с одного IP за час. Если лимит исчерпан, повтори регистрацию позже. Удаление локального `Sirius_MCP_Token.txt` приведёт к выдаче нового устройства при следующем запуске.
 
-**Claude Desktop is not configured automatically by this installer.** Use **Settings → Connectors → Add custom connector** in Claude Desktop and enter the MCP URL and authentication header manually.
+## Управление MCP в Sirius Loader
 
-### Token and configuration security
+Вкладка **Utility → Sirius MCP · Облако** содержит кнопку **«Запустить MCP»**. После запуска она меняется на **«Остановить MCP»**. Остановка прекращает цикл опроса команд; повторный запуск создаёт новый цикл.
 
-The installer reads the personal device token and writes it into the selected MCP client's configuration. The token is a credential for your Loader instance.
+Перед первым запуском отображается предупреждение о возможностях MCP, рисках удалённых команд и Lua-кода. Кнопка **«Я согласен с рисками»** сохраняет локальное согласие в `Sirius_MCP_Risk_Accepted.txt` (если executor поддерживает `writefile`). При отсутствии `writefile` согласие действует только в текущей сессии. Отказ закрывает предупреждение без запуска MCP.
 
-- Do not share `Sirius_MCP_Token.txt`, paste the token into chats, or commit it to Git.
-- Protect access to your Windows account and the MCP client configuration files.
-- Only select client configurations on a Windows account you control.
-- Backups may also contain the token after a configuration has been installed. Protect or delete old backups securely when they are no longer needed.
-- The installer masks the token in its input field, but its log can include local file paths. Review the log before sharing it.
+В **Settings → Данные и конфиденциальность** доступны:
 
-## How the multi-user bridge works
+- **«Сбросить согласие с рисками MCP»** — удаляет только сохранённое согласие; предупреждение появится снова при следующем запуске MCP.
+- **«Полностью удалить данные Sirius»** — показывает отдельное подтверждение и пытается удалить конфигурацию, профили и файлы, сохранённые самим Loader, MCP-токен, URL и файл согласия. Файлы других программ/executor не должны затрагиваться. Для очистки папок executor должен поддерживать `listfiles` и `delfile`. Ошибки удаления выводятся в консоль. После очистки Loader выгружает текущую сессию.
 
-1. On first run, Loader sends a request to `POST /register`.
-2. The service creates a unique device ID and returns a signed token.
-3. Loader saves the token locally as `Sirius_MCP_Token.txt`.
-4. Loader sends its heartbeat, state, logs, and command responses using that token.
-5. MCP requests use the same token in the `X-Sirius-Token` HTTP header.
-6. The server scopes queues and device data to the authenticated device.
+Согласие с общим предупреждением MCP не является согласием на каждый удалённый Lua-запрос: `sirius_execute_lua` требует отдельного подтверждения и проверки кода на устройстве.
 
-The shared signing secret `SIRIUS_MCP_TOKEN` is a server-side environment variable. It is not the personal device token and must never be placed in Loader code, installers, or public files.
+## Установщик MCP
 
-## MCP connection details
+После принятия предупреждения Loader добавляет кнопку **«Скопировать ссылку на установщик MCP сервера»**. Она копирует ссылку на последний GitHub Release:
 
-- **Transport:** Streamable HTTP
-- **MCP endpoint:** `https://sirius-mcp.onrender.com/mcp`
-- **Authentication header:** `X-Sirius-Token`
-- **Header value:** the contents of your local `Sirius_MCP_Token.txt`
+`https://github.com/sirius551/asdfjkafdkgjaj/releases/latest/download/SiriusMCPInstaller.exe`
 
-Each user must configure the token belonging to their own running Loader instance. Do not use another user's token.
+Если API буфера обмена executor недоступен, Loader показывает ссылку в уведомлении/консоли. Установщик предназначен для Windows; после настройки MCP-клиенты нужно перезапустить.
 
-### Manual connection
+**Важно:** ссылка заработает только после публикации `SiriusMCPInstaller.exe` как asset GitHub Release с точным именем файла. Исходный EXE пока не прикреплён к Release, поэтому до загрузки asset ссылка не будет отдавать установщик.
 
-If you prefer not to use the installer, configure your MCP client manually with:
+## Подключение MCP-клиента
 
-- URL: `https://sirius-mcp.onrender.com/mcp`
+Чтобы управлять именно своим запущенным Loader через MCP-клиент:
+
+- MCP URL: `https://sirius-mcp.onrender.com/mcp`
 - Transport: Streamable HTTP
-- Header name: `X-Sirius-Token`
-- Header value: your personal device token
+- Header: `X-Sirius-Token: <твой персональный токен>`
 
-Use the client's own configuration format and secret-storage mechanism. Avoid placing the token in a project file that is committed to Git.
+Персональный токен находится в `Sirius_MCP_Token.txt` в папке executor. Каждый пользователь должен подключать собственный токен. Не используй чужой токен и не публикуй свой.
 
-### Visual Studio Code example
+## Подключение к Visual Studio Code
 
-For VS Code, create or edit `.vscode/mcp.json` in your project:
+Loader может скопировать готовую конфигурацию: открой вкладку **Utility → Sirius MCP → Подключение к MCP-клиентам** и нажми **«Скопировать конфиг для Visual Studio Code»**. Если API буфера обмена в executor отсутствует, настрой VS Code вручную:
+
+1. Открой в VS Code папку проекта.
+2. Создай папку `.vscode`, если её ещё нет.
+3. Создай файл `.vscode/mcp.json`.
+4. Вставь конфигурацию ниже и сохрани файл.
+5. Нажми **Start** над записью сервера. VS Code отдельно запросит персональный токен устройства.
+6. Введи значение из локального файла `Sirius_MCP_Token.txt`, который Loader создал в папке executor. Не отправляй его в чат и не добавляй в Git.
 
 ```json
 {
@@ -122,73 +110,68 @@ For VS Code, create or edit `.vscode/mcp.json` in your project:
 }
 ```
 
-Start the server in VS Code and enter the token from your own Loader's `Sirius_MCP_Token.txt` when prompted. Keep the token out of source control.
+В конфигурации используется защищённый input VS Code: секрет не записывается прямо в JSON. Конфигурация предназначена для VS Code и его формата MCP; не копируй её без изменений в клиенты с другим форматом.
 
-## Loader controls and risk confirmation
+## Другие MCP-клиенты
 
-The Loader exposes MCP controls in **Utility → Sirius MCP · Облако**. Starting MCP displays a risk notice explaining that MCP can interact with Loader controls and request Lua execution.
+Клиент можно подключить вручную, если он поддерживает **Streamable HTTP** и пользовательские HTTP-заголовки:
 
-The general risk acknowledgement is separate from approval for an individual Lua execution. The `sirius_execute_lua` tool requires `confirm_risk=true` and a fresh approval on the device for the exact code. Read the full code in the local confirmation prompt before approving it. Declining the prompt prevents that execution.
+- URL: `https://sirius-mcp.onrender.com/mcp`
+- Transport: `Streamable HTTP`
+- Header: `X-Sirius-Token`
+- Header value: содержимое локального `Sirius_MCP_Token.txt`
 
-The Loader may offer a setting to reset the stored MCP risk acknowledgement and a separate option to remove Sirius data. The exact cleanup capabilities depend on the executor's file APIs.
+В других клиентах используй их собственный формат конфигурации для HTTP-заголовков. Если клиент умеет хранить секреты отдельно, используй его защищённое хранилище. Не помещай персональный токен в общий репозиторий, публичный gist или файл проекта, который коммитится в Git.
+
+### Если конфиг не скопировался
+
+- Проверь, поддерживает ли executor функцию `setclipboard` или `toclipboard`.
+- Если нет, скопируй JSON выше вручную.
+- Если VS Code отвечает 401 Unauthorized, проверь, что введён токен из файла именно того экземпляра Loader, который сейчас запущен.
+- Если Loader ещё не создавал `Sirius_MCP_Token.txt`, сначала запусти Loader и дождись успешной регистрации и сохранения токена.
+
+## Endpoints
+
+- `GET /health` — публичная проверка доступности.
+- `POST /register` — выдаёт новый токен устройства с ограничением частоты регистрации.
+- `GET /poll` — получает команду только для текущего токена.
+- `POST /result` — отправляет результат команды в очередь этого устройства.
+- `POST /state` — обновляет состояние этого устройства.
+- `POST /logs` — принимает журналы этого устройства.
+- `/mcp` — MCP Streamable HTTP endpoint, требует персональный токен.
+
+Все endpoints, кроме `/health` и `POST /register`, требуют валидный персональный токен. Токены подписываются серверным секретом и имеют срок действия 365 дней.
 
 ## MCP tools
 
-| Tool | Purpose |
-|---|---|
-| `sirius_connection_status` | Check whether the Loader associated with this token has sent a recent heartbeat. |
-| `sirius_get_status` | Read the latest available player, place, health, and position data. |
-| `sirius_list_controls` | List controls registered by this Loader and their IDs. |
-| `sirius_set_toggle(control_id, enabled)` | Set a registered toggle. Use an exact control ID. |
-| `sirius_set_slider(control_id, value)` | Set a registered slider. The Loader validates the control and range. |
-| `sirius_run_action(action_id)` | Run a registered button action. Use an exact action ID. |
-| `sirius_create_lua_script(filename, code)` | Return Lua source as text. It does not save or execute the script. |
-| `sirius_execute_lua(code, confirm_risk)` | Request Lua execution after explicit risk confirmation and local device approval. |
-| `sirius_capture_screenshot()` | Not available in cloud mode. |
-| `sirius_read_recent_logs(max_lines)` | Read recent events for this device token. |
+- `sirius_connection_status`
+- `sirius_get_status`
+- `sirius_list_controls`
+- `sirius_set_toggle(control_id, enabled)`
+- `sirius_set_slider(control_id, value)`
+- `sirius_run_action(action_id)`
+- `sirius_create_lua_script(filename, code)` — возвращает текст кода, но не сохраняет и не запускает его.
+- `sirius_execute_lua(code, confirm_risk)` — требует `confirm_risk=true` и отдельного подтверждения на устройстве.
+- `sirius_capture_screenshot()` — недоступен в облачном режиме.
+- `sirius_read_recent_logs(max_lines)`
 
-Recommended first checks: call `sirius_connection_status`, then `sirius_list_controls`. Use the exact IDs returned by the control list.
+Инструменты работают с устройством, чей токен передан в заголовке MCP-запроса. Сначала используй `sirius_connection_status`, затем `sirius_list_controls`, чтобы получить точные ID элементов.
 
-## HTTP endpoints
+## Python Installer: клиенты и резервные копии
 
-- `GET /health` — public service health check.
-- `POST /register` — registers a device and issues a personal token; limited to five attempts per IP per hour.
-- `GET /poll` — retrieves a command for the authenticated device.
-- `POST /result` — returns a command result for the authenticated device.
-- `POST /state` — updates state for the authenticated device.
-- `POST /logs` — submits logs for the authenticated device.
-- `/mcp` — Streamable HTTP MCP endpoint; requires a valid personal device token.
+Текущий установщик нацелен на следующие форматы конфигураций Windows (пути и схемы могут отличаться в зависимости от версии клиента): Visual Studio Code, Cursor, Claude Code, Gemini CLI, Windsurf legacy, Devin Desktop, Cline, Roo Code и OpenAI Codex. Claude Desktop требует ручной настройки через собственный интерфейс Connectors. Установщик читает персональный токен из `Sirius_MCP_Token.txt`, добавляет endpoint и заголовок `X-Sirius-Token`, сохраняет резервную копию изменяемых конфигураций и выводит результат в журнал. После установки соответствующие приложения нужно перезапустить.
 
-Device tokens are signed and currently expire after 365 days. Changing the server signing secret invalidates previously issued tokens.
+Установщик не должен содержать общий серверный секрет. Токен устройства является секретом пользователя; конфигурационные файлы, в которые он добавлен, нужно защищать.
 
-## Server deployment (maintainers)
+## Безопасность и ограничения
 
-The following settings describe the current Render deployment configuration:
-
-- Service type: Web Service
-- Repository: `sirius551/asdfjkafdkgjaj`
-- Branch for this edition: `public-multitenant`
-- Runtime: Python 3
-- Root directory: `MCP`
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
-- Health check path: `/health`
-
-Required environment variable:
-
-- `SIRIUS_MCP_TOKEN`: a randomly generated server-side signing secret with at least 32 characters. Keep it private. This is not a user's device token.
-
-Render provides `PORT` and `RENDER_EXTERNAL_HOSTNAME`. The service also accepts `SIRIUS_ALLOWED_HOST` as an alternative host setting.
-
-## Limitations and troubleshooting
-
-- **401 Unauthorized:** confirm that the MCP client uses the token from the same Loader instance that is currently running.
-- **Token file not found:** start Loader, wait for successful registration, and verify that the executor supports the required file APIs. You can also select the token file manually in the installer.
-- **Registration rate limit (429):** the service allows up to five registration attempts per IP in one hour. Wait before trying again.
-- **Loader appears offline:** make sure MCP is running in Loader and that the executor's HTTP request API is available.
-- **Changes are not visible in the client:** fully restart the configured MCP client after installation.
-- **Cloud service restarted:** in-memory queues, pending commands, recent state, and logs are cleared when the process restarts. Devices must reconnect and resume sending state.
-- **Screenshot unavailable:** local desktop capture is not supported by the cloud-hosted service.
-- **Render sleeps:** an idle free service may sleep; a health endpoint or external ping does not guarantee uninterrupted availability.
-
-The bridge is a remote-control interface to your own Loader. Review actions and Lua code before approving them, and keep both server credentials and personal device tokens private.
+- Не помещай серверный секрет в Lua, GitHub, ScriptBlox, README или сообщения.
+- Персональный токен устройства — секрет доступа. Не публикуй файл `Sirius_MCP_Token.txt`.
+- Команды, состояние и журналы разделены по устройствам. Один пользователь не получает очередь или heartbeat другого пользователя.
+- Регистрация ограничена по IP, но это базовая защита, а не полноценная система аккаунтов. При публичном запуске следи за злоупотреблениями и нагрузкой.
+- Токены подписанные и не хранятся в базе. Для отзыва всех токенов нужно сменить `SIRIUS_MCP_TOKEN`; индивидуальный отзыв пока не реализован.
+- Состояние, очереди и журналы находятся в памяти процесса и очищаются при перезапуске Render. Подписанные токены остаются действительными, пока не истекут и пока не изменён серверный секрет.
+- Бесплатный Render может засыпать после простоя; `/health` подходит для проверки состояния, но внешние пинги не гарантируют постоянную работу.
+- Облачный сервер не видит экран пользователя и не может делать локальные скриншоты.
+- Удалённое выполнение Lua может выполнять действия в executor. Перед подтверждением обязательно прочитай полный код в локальном окне. Отказ не отключает облачное соединение.
+- MCP не превращает локальные клиентские изменения Roblox в серверные действия и не обходит ограничения самой игры.
