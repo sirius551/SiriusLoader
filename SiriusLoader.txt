@@ -3035,21 +3035,38 @@ end
 do
 MoveTab:Section("Параметры персонажа")
 local speedOn, speedVal, jumpOn, jumpVal = false, 50, false, 100
+-- Both speed controls share one writer, so they cannot overwrite each other.
+local speedHack = {on = false, mult = 1.5}
+local function getConfiguredWalkSpeed()
+    local base = speedOn and speedVal or 16
+    return speedHack.on and (base * speedHack.mult) or base
+end
 local moveConn = RunService.Heartbeat:Connect(function()
     local h = GetHum()
     if not h then return end
-    if speedOn then h.WalkSpeed = speedVal end
-    if jumpOn then h.UseJumpPower = true h.JumpPower = jumpVal end
+    h.WalkSpeed = getConfiguredWalkSpeed()
+    if jumpOn then
+        h.UseJumpPower = true
+        h.JumpPower = jumpVal
+    end
 end)
 Add(moveConn)
 MoveTab:Toggle("Кастомная скорость", false, function(on)
     speedOn = on
-    if not on then local h = GetHum() if h then h.WalkSpeed = 16 end end
+    local h = GetHum()
+    if h then h.WalkSpeed = getConfiguredWalkSpeed() end
 end)
-MoveTab:Slider("WalkSpeed", 16, 300, 50, function(v) speedVal = v end)
+MoveTab:Slider("WalkSpeed", 16, 300, 50, function(v)
+    speedVal = v
+    local h = GetHum()
+    if h then h.WalkSpeed = getConfiguredWalkSpeed() end
+end)
 MoveTab:Toggle("Кастомный прыжок", false, function(on)
     jumpOn = on
-    if not on then local h = GetHum() if h then h.JumpPower = 50 end end
+    if not on then
+        local h = GetHum()
+        if h then h.JumpPower = 50 end
+    end
 end)
 MoveTab:Slider("JumpPower", 50, 400, 100, function(v) jumpVal = v end)
 
@@ -3233,65 +3250,98 @@ end)
 
 
 MoveTab:Section("Продвинутое передвижение")
-local speedHack = {on=false, conn=nil, mult=1.5}
-local normalSpeed = 16
 MoveTab:Toggle("Speed Hack (множитель скорости)", false, function(on)
-    if speedHack.conn then speedHack.conn:Disconnect() speedHack.conn = nil end
     speedHack.on = on
-    if not on then
-        local h = GetHum()
-        if h then h.WalkSpeed = normalSpeed end
-        return
-    end
-    speedHack.conn = RunService.Heartbeat:Connect(function()
-        local h = GetHum()
-        if not h then return end
-        if type(speedOn) == "boolean" and speedOn then return end
-        normalSpeed = 16
-        h.WalkSpeed = normalSpeed * speedHack.mult
-    end)
+    local h = GetHum()
+    if h then h.WalkSpeed = getConfiguredWalkSpeed() end
 end)
 OnUnload(function()
-    if speedHack.conn then speedHack.conn:Disconnect() end
-    local h = GetHum() if h then h.WalkSpeed = 16 end
+    speedHack.on = false
+    local h = GetHum()
+    if h then h.WalkSpeed = speedOn and speedVal or 16 end
 end)
-MoveTab:Slider("Множитель скорости", 1, 10, 1.5, function(v) speedHack.mult = v end, 1)
+MoveTab:Slider("Множитель скорости", 1, 10, 1.5, function(v)
+    speedHack.mult = v
+    local h = GetHum()
+    if h then h.WalkSpeed = getConfiguredWalkSpeed() end
+end, 1)
 
-local swimConn
-MoveTab:Toggle("Swim Fly (летать в воде/воздухе)", false, function(on)
+local swimConn, swimBV
+local swimSpeed = 35
+local function stopSwimFly()
     if swimConn then swimConn:Disconnect() swimConn = nil end
-    if not on then
-        local h = GetHum()
-        if h then h:SetStateEnabled(Enum.HumanoidStateType.Swimming, true) end
-        return
-    end
+    if swimBV then swimBV:Destroy() swimBV = nil end
+end
+MoveTab:Toggle("Swim Fly (летать в воде/воздухе)", false, function(on)
+    stopSwimFly()
+    if not on then return end
+
     swimConn = RunService.Heartbeat:Connect(function()
         local h, r = GetHum(), GetRoot()
-        if not (h and r) then return end
-        if h:GetState() == Enum.HumanoidStateType.Swimming then
-            r.AssemblyLinearVelocity = Vector3.new(r.AssemblyLinearVelocity.X, 15, r.AssemblyLinearVelocity.Z)
+        if not (h and r and h.Health > 0) then
+            if swimBV then swimBV:Destroy() swimBV = nil end
+            return
         end
+
+        if not swimBV or swimBV.Parent ~= r then
+            if swimBV then swimBV:Destroy() end
+            swimBV = Instance.new("BodyVelocity")
+            swimBV.Name = "SiriusSwimFlyVelocity"
+            swimBV.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+            swimBV.P = 1e4
+            swimBV.Velocity = Vector3.zero
+            swimBV.Parent = r
+        end
+
+        local cam = workspace.CurrentCamera
+        local direction = Vector3.zero
+        if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+            direction = h.MoveDirection
+            if h.Jump then direction += Vector3.yAxis end
+        elseif cam then
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then direction += cam.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= cam.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then direction -= Vector3.yAxis end
+        end
+        swimBV.Velocity = direction.Magnitude > 0.01 and direction.Unit * swimSpeed or Vector3.zero
     end)
 end)
-OnUnload(function() if swimConn then swimConn:Disconnect() end end)
+OnUnload(stopSwimFly)
+MoveTab:Slider("Скорость Swim Fly", 10, 150, 35, function(v) swimSpeed = v end)
 
 local longJumpConn
+local longJumpMultiplier = 1.6
 MoveTab:Toggle("Long Jump (ускорение при прыжке)", false, function(on)
     if longJumpConn then longJumpConn:Disconnect() longJumpConn = nil end
     if not on then return end
-    local lastY = 0
-    longJumpConn = RunService.Heartbeat:Connect(function(dt)
+
+    local wasAirborne = false
+    longJumpConn = RunService.Heartbeat:Connect(function()
         local r, h = GetRoot(), GetHum()
-        if not (r and h) then return end
-        local curY = r.Position.Y
-        if h.FloorMaterial == Enum.Material.Air and curY > lastY then
-            local v = r.AssemblyLinearVelocity
-            r.AssemblyLinearVelocity = Vector3.new(v.X * 1.03, v.Y, v.Z * 1.03)
+        if not (r and h and h.Health > 0) then
+            wasAirborne = false
+            return
         end
-        lastY = curY
+
+        local airborne = h.FloorMaterial == Enum.Material.Air
+        if airborne and not wasAirborne then
+            local move = h.MoveDirection
+            if move.Magnitude > 0.05 then
+                local velocity = r.AssemblyLinearVelocity
+                local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+                local targetSpeed = math.max(horizontal.Magnitude, h.WalkSpeed) * longJumpMultiplier
+                local boosted = move.Unit * targetSpeed
+                r.AssemblyLinearVelocity = Vector3.new(boosted.X, velocity.Y, boosted.Z)
+            end
+        end
+        wasAirborne = airborne
     end)
 end)
-OnUnload(function() if longJumpConn then longJumpConn:Disconnect() end end)
+OnUnload(function() if longJumpConn then longJumpConn:Disconnect() longJumpConn = nil end end)
+MoveTab:Slider("Множитель Long Jump", 1.1, 3, 1.6, function(v) longJumpMultiplier = v end, 1)
 
 MoveTab:Section("Авто-движение")
 
