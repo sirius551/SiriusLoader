@@ -2728,27 +2728,53 @@ OnUnload(function() if hb.conn then hb.conn:Disconnect() end RestoreHitboxes() e
 RageTab:Slider("Размер хитбокса", 2, 30, 10, function(v) hb.size = v end)
 
 
-RageTab:Section("Velocity Abuse")
+RageTab:Section(VisualText("Бросок персонажа", "Velocity Abuse"))
 local velAbuse = {on=false, force=200, dir="Up", conn=nil}
-local velDirs = {"Up","Forward","Random","Backward"}
+local velDirs = {"Up","Down","Forward","Backward","Random"}
+local velDirLabels = {
+    Up = VisualText("Вверх", "Up"),
+    Down = VisualText("Вниз", "Down"),
+    Forward = VisualText("Вперёд", "Forward"),
+    Backward = VisualText("Назад", "Backward"),
+    Random = VisualText("Случайно", "Random"),
+}
+local function velDirectionText()
+    return VisualText("Направление: ", "Direction: ") .. velDirLabels[velAbuse.dir] .. VisualText(" (нажми для смены)", " (click to change)")
+end
 local velDirBtn
-velDirBtn = RageTab:Button("Направление: Up (нажми для смены)", function()
+velDirBtn = RageTab:Button(velDirectionText(), function()
     local i = 1
     for j, v in ipairs(velDirs) do if v == velAbuse.dir then i = j break end end
     velAbuse.dir = velDirs[i % #velDirs + 1]
-    velDirBtn.Text = "Направление: " .. velAbuse.dir .. " (нажми для смены)"
+    velDirBtn.Text = velDirectionText()
 end, true)
 local function doVelAbuse()
     local r, cam = GetRoot(), workspace.CurrentCamera
     if not r then return end
     local dir
-    if velAbuse.dir == "Up" then dir = Vector3.new(0,1,0)
-    elseif velAbuse.dir == "Forward" then dir = cam.CFrame.LookVector
-    elseif velAbuse.dir == "Backward" then dir = -cam.CFrame.LookVector
-    else dir = Vector3.new(math.random()-0.5, math.random()-0.5, math.random()-0.5).Unit end
+    if velAbuse.dir == "Up" then
+        dir = Vector3.new(0, 1, 0)
+    elseif velAbuse.dir == "Down" then
+        dir = Vector3.new(0, -1, 0)
+    elseif velAbuse.dir == "Forward" or velAbuse.dir == "Backward" then
+        -- Берём только горизонтальное направление камеры, чтобы наклон камеры не подбрасывал персонажа.
+        local look = cam and cam.CFrame.LookVector or r.CFrame.LookVector
+        local horizontal = Vector3.new(look.X, 0, look.Z)
+        if horizontal.Magnitude < 0.001 then
+            local fallback = r.CFrame.LookVector
+            horizontal = Vector3.new(fallback.X, 0, fallback.Z)
+        end
+        if horizontal.Magnitude < 0.001 then return end
+        dir = horizontal.Unit
+        if velAbuse.dir == "Backward" then dir = -dir end
+    else
+        local randomDir = Vector3.new(math.random()-0.5, math.random()-0.5, math.random()-0.5)
+        if randomDir.Magnitude < 0.001 then randomDir = Vector3.new(1, 0, 0) end
+        dir = randomDir.Unit
+    end
     r.AssemblyLinearVelocity = dir * velAbuse.force
 end
-RageTab:Toggle("Velocity Abuse (V / кнопка ниже)", false, function(on)
+RageTab:Toggle(VisualText("Бросок персонажа (V / кнопка ниже)", "Velocity Abuse (V / button below)"), false, function(on)
     if velAbuse.conn then velAbuse.conn:Disconnect() velAbuse.conn = nil end
     velAbuse.on = on
     if not on then return end
@@ -2758,8 +2784,8 @@ RageTab:Toggle("Velocity Abuse (V / кнопка ниже)", false, function(on)
     end)
 end)
 OnUnload(function() if velAbuse.conn then velAbuse.conn:Disconnect() end end)
-RageTab:Button("💥 Velocity Abuse (тап / клик)", function() doVelAbuse() end)
-RageTab:Slider("Сила броска", 50, 1000, 200, function(v) velAbuse.force = v end)
+RageTab:Button(VisualText("💥 Бросить персонажа (тап / клик)", "💥 Velocity Abuse (tap / click)"), function() doVelAbuse() end)
+RageTab:Slider(VisualText("Сила броска", "Throw force"), 50, 1000, 200, function(v) velAbuse.force = v end)
 
 RageTab:Section("Orbit")
 local orbit = {on=false, conn=nil, radius=8, speed=2, target=nil, angle=0}
