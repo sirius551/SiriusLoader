@@ -3003,8 +3003,27 @@ OnUnload(StopFly)
 MoveTab:Slider("Скорость полёта", 10, 300, 60, function(v) flySpeed = v end)
 
 local origGravity = workspace.Gravity
-MoveTab:Slider("Гравитация", 0, 400, math.floor(origGravity), function(v) workspace.Gravity = v end)
-OnUnload(function() workspace.Gravity = origGravity end)
+local gravitySliderValue = math.floor(origGravity)
+local zeroGravityEnabled, x4GravityEnabled = false, false
+
+local function ApplyGravity()
+    if zeroGravityEnabled then
+        workspace.Gravity = 0
+    elseif x4GravityEnabled then
+        workspace.Gravity = 785
+    else
+        workspace.Gravity = gravitySliderValue
+    end
+end
+
+MoveTab:Slider("Гравитация", 0, 400, gravitySliderValue, function(v)
+    gravitySliderValue = v
+    ApplyGravity()
+end)
+OnUnload(function()
+    zeroGravityEnabled, x4GravityEnabled = false, false
+    workspace.Gravity = origGravity
+end)
 
 local ctpConn
 MoveTab:Toggle("Click TP (Ctrl + ЛКМ)", false, function(on)
@@ -7166,13 +7185,14 @@ ClientTab:Section("Физика и среда")
 
 -- 15. Нулевая гравитация
 ClientTab:Toggle("15. Нулевая гравитация", false, function(on)
-    workspace.Gravity = on and 0 or 196.2
+    zeroGravityEnabled = on
+    ApplyGravity()
 end)
-OnUnload(function() workspace.Gravity = 196.2 end)
 
 -- 16. Супер-гравитация
 ClientTab:Toggle("16. Супер-гравитация (x4)", false, function(on)
-    workspace.Gravity = on and 785 or 196.2
+    x4GravityEnabled = on
+    ApplyGravity()
 end)
 
 -- 17. Заморозить физику всех объектов (кроме своего)
