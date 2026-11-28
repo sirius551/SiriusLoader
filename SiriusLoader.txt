@@ -3411,6 +3411,68 @@ end)
 OnUnload(StopFly)
 MoveTab:Slider("Скорость полёта", 10, 300, 60, function(v) flySpeed = v end)
 
+-- Дополнительные режимы полёта.
+-- Общий контроллер исключает одновременную работу нескольких fly-режимов.
+local extraFlyMode, extraFlyConn = nil, nil
+local extraFlySpeed = 60
+local function StopExtraFly()
+    if extraFlyConn then extraFlyConn:Disconnect() extraFlyConn = nil end
+    extraFlyMode = nil
+end
+
+local function StartExtraFly(mode)
+    StopExtraFly()
+    extraFlyMode = mode
+    extraFlyConn = RunService.Heartbeat:Connect(function(dt)
+        local humanoid, root = GetHum(), GetRoot()
+        local camera = workspace.CurrentCamera
+        if not humanoid or not root or not camera then return end
+
+        local move = Vector3.zero
+        if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+            move = humanoid.MoveDirection
+        else
+            if UIS:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
+        end
+
+        local vertical = 0
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical += 1 end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vertical -= 1 end
+
+        if mode == "Glide" then
+            -- Планирование: гасим падение, сохраняя горизонтальное управление.
+            local velocity = root.AssemblyLinearVelocity
+            local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+            local target = move.Magnitude > 0 and move.Unit * extraFlySpeed or horizontal
+            root.AssemblyLinearVelocity = Vector3.new(target.X, math.max(velocity.Y, -8), target.Z)
+        elseif mode == "Jetpack" then
+            -- Подъём по Space, горизонтальное движение WASD.
+            local horizontal = move.Magnitude > 0 and move.Unit * extraFlySpeed or Vector3.zero
+            root.AssemblyLinearVelocity = Vector3.new(horizontal.X, vertical * extraFlySpeed, horizontal.Z)
+        elseif mode == "Velocity" then
+            local dir = move + Vector3.yAxis * vertical
+            root.AssemblyLinearVelocity = dir.Magnitude > 0 and dir.Unit * extraFlySpeed or Vector3.zero
+        end
+    end)
+end
+
+MoveTab:Toggle("Glide (планирование)", false, function(on)
+    if on then StartExtraFly("Glide") else StopExtraFly() end
+end)
+MoveTab:Toggle("Jetpack (Space вверх)", false, function(on)
+    if on then StartExtraFly("Jetpack") else StopExtraFly() end
+end)
+MoveTab:Toggle("Velocity Fly", false, function(on)
+    if on then StartExtraFly("Velocity") else StopExtraFly() end
+end)
+MoveTab:Slider("Скорость дополнительных полётов", 10, 250, 60, function(v)
+    extraFlySpeed = v
+end)
+OnUnload(StopExtraFly)
+
 -- Отдельный CFrame Fly, не использует BodyVelocity/BodyGyro.
 local cframeFlySpeed, cframeFlyConn = 60, nil
 local function StopCFrameFly()
@@ -3619,24 +3681,38 @@ MoveTab:Toggle("Long Jump (ускорение при прыжке)", false, func
     if not on then return end
 
     local wasAirborne = false
+    local boostDirection = Vector3.zero
+    local boostedThisJump = false
     longJumpConn = RunService.Heartbeat:Connect(function()
         local r, h = GetRoot(), GetHum()
         if not (r and h and h.Health > 0) then
-            wasAirborne = false
+            wasAirborne, boostedThisJump = false, false
+            boostDirection = Vector3.zero
             return
         end
 
         local airborne = h.FloorMaterial == Enum.Material.Air
-        if airborne and not wasAirborne then
-            local move = h.MoveDirection
-            if move.Magnitude > 0.05 then
-                local velocity = r.AssemblyLinearVelocity
-                local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+        local move = h.MoveDirection
+
+        -- Запоминаем направление, пока игрок ещё на земле, чтобы не потерять
+        -- ввод в первый кадр прыжка.
+        if not airborne and move.Magnitude > 0.05 then
+            boostDirection = move.Unit
+            boostedThisJump = false
+        end
+
+        if airborne and not wasAirborne and not boostedThisJump then
+            local velocity = r.AssemblyLinearVelocity
+            local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+            local direction = move.Magnitude > 0.05 and move.Unit or boostDirection
+            if direction.Magnitude > 0.05 then
                 local targetSpeed = math.max(horizontal.Magnitude, h.WalkSpeed) * longJumpMultiplier
-                local boosted = move.Unit * targetSpeed
+                local boosted = direction.Unit * targetSpeed
                 r.AssemblyLinearVelocity = Vector3.new(boosted.X, velocity.Y, boosted.Z)
+                boostedThisJump = true
             end
         end
+
         wasAirborne = airborne
     end)
 end)
