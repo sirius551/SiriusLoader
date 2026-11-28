@@ -3571,9 +3571,10 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
     airWalkPlatform.CFrame = CFrame.new(root.Position.X, airWalkY, root.Position.Z)
     airWalkPlatform.Transparency = 1
     airWalkPlatform.Anchored = true
-    -- Пока игрок стоит или набирает высоту прыжком, платформа не сталкивается
-    -- с персонажем. Коллизия включается только после фиксации на вершине.
-    airWalkPlatform.CanCollide = false
+    -- В обычной ходьбе платформа должна сразу поддерживать персонажа,
+    -- иначе при сходе с края земли он начнёт падать до следующего прыжка.
+    -- На время прыжка коллизия временно отключается ниже.
+    airWalkPlatform.CanCollide = true
     airWalkPlatform.CanTouch = false
     airWalkPlatform.CanQuery = true
     airWalkPlatform.CastShadow = false
@@ -3620,7 +3621,7 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
             currentRoot.Position.Z
         )
     end)
-    Notify("Air Walk", "Платформа не сталкивается с персонажем в покое и включается после прыжка.", 3, true)
+    Notify("Air Walk", "Платформа поддерживает при обычной ходьбе и отключается на время прыжка.", 3, true)
 end)
 OnUnload(stopAirWalk)
 
