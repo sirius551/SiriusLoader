@@ -3294,10 +3294,10 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
     airWalkPlatform.CastShadow = false
     airWalkPlatform.Parent = workspace
 
-    -- Пока персонаж набирает высоту прыжком, платформа поднимается
-    -- вместе с ним. На вершине прыжка фиксируется и ловит персонажа
-    -- при снижении. После этого перемещается только по горизонтали.
-    local rising = false
+    -- Вертикально двигаем платформу только после реального Jumping.
+    -- Одна лишь скорость Y ненадёжна: физические колебания стоящего
+    -- персонажа могут ошибочно запускать подъём платформы.
+    local jumpTracking = false
     airWalkConn = RunService.Stepped:Connect(function()
         if not airWalkPlatform or not airWalkPlatform.Parent then
             stopAirWalk()
@@ -3305,15 +3305,25 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         end
 
         local currentRoot = GetRoot()
-        if not currentRoot then return end
+        local currentHumanoid = GetHum()
+        if not currentRoot or not currentHumanoid then return end
 
+        local state = currentHumanoid:GetState()
         local verticalSpeed = currentRoot.AssemblyLinearVelocity.Y
-        if verticalSpeed > 1 then
-            rising = true
-            airWalkY = getFootPlatformY(currentRoot)
-        elseif rising then
-            rising = false
-            airWalkY = getFootPlatformY(currentRoot)
+
+        if state == Enum.HumanoidStateType.Jumping then
+            jumpTracking = true
+        end
+
+        if jumpTracking then
+            if verticalSpeed > 0.5 then
+                airWalkY = getFootPlatformY(currentRoot)
+            else
+                -- На вершине прыжка фиксируем платформу. Не продолжаем
+                -- поднимать её из-за небольших колебаний скорости.
+                jumpTracking = false
+                airWalkY = getFootPlatformY(currentRoot)
+            end
         end
 
         airWalkPlatform.CFrame = CFrame.new(
@@ -3322,7 +3332,7 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
             currentRoot.Position.Z
         )
     end)
-    Notify("Air Walk", "Платформа поднимается вместе с прыжком и фиксируется на его вершине.", 3, true)
+    Notify("Air Walk", "Платформа меняет высоту только во время настоящего прыжка.", 3, true)
 end)
 OnUnload(stopAirWalk)
 
