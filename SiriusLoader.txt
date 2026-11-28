@@ -10014,6 +10014,21 @@ do
         elseif atomStatus then
             warn("[Sirius Update] Atom feed HTTP " .. tostring(atomStatus))
         end
+
+        -- Последний резерв: jsDelivr CDN. У веток CDN может быть кеш до 12 часов,
+        -- поэтому этот путь используется только если REST API и Atom недоступны.
+        local cdnUrl = "https://cdn.jsdelivr.net/gh/sirius551/SiriusLoader@main/SiriusLoader.txt?check=" .. tostring(os.clock())
+        local cdnStatus, cdnSource = httpGet(cdnUrl, "text/plain")
+        if cdnStatus == 200 and type(cdnSource) == "string" and #cdnSource > 1000 then
+            local hash = 0
+            for i = 1, #cdnSource do
+                hash = (hash * 31 + string.byte(cdnSource, i)) % 2147483647
+            end
+            warn("[Sirius Update] Using jsDelivr CDN fallback for version check.")
+            return "cdn-" .. tostring(hash)
+        elseif cdnStatus then
+            warn("[Sirius Update] jsDelivr CDN HTTP " .. tostring(cdnStatus))
+        end
         return nil
     end
 
