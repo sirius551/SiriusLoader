@@ -10331,7 +10331,24 @@ do
         end
     end
 
-    if getgenv then getgenv().SiriusCheckUpdates = function() checkForUpdates(true) end end
+    -- Регистрируем проверку в том же окружении, из которого её вызывает кнопка.
+    -- Не требуем getgenv: некоторые executors предоставляют только _G.
+    local checkerEnv = (getgenv and getgenv()) or _G
+    checkerEnv.SiriusCheckUpdates = function()
+        task.spawn(function()
+            local ok, err = pcall(checkForUpdates, true)
+            if not ok then
+                warn("[Sirius Update] Check failed: " .. tostring(err))
+                Notify("Sirius Update", "Ошибка проверки: " .. tostring(err), 5, true)
+            end
+        end)
+    end
+    -- Если getgenv существует, дополнительно публикуем туда явно.
+    if getgenv then
+        pcall(function()
+            getgenv().SiriusCheckUpdates = checkerEnv.SiriusCheckUpdates
+        end)
+    end
     task.spawn(function()
         local elapsed = 0
         task.wait(3)
