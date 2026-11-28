@@ -3417,44 +3417,63 @@ local extraFlyMode, extraFlyConn = nil, nil
 local extraFlySpeed = 60
 local function StopExtraFly()
     if extraFlyConn then extraFlyConn:Disconnect() extraFlyConn = nil end
+    if extraFlyMover then extraFlyMover:Destroy() extraFlyMover = nil end
+    local root = GetRoot()
+    if root then root.AssemblyLinearVelocity = Vector3.zero end
     extraFlyMode = nil
 end
 
+local extraFlyMover = nil
 local function StartExtraFly(mode)
     StopExtraFly()
     extraFlyMode = mode
+    local humanoid, root = GetHum(), GetRoot()
+    if not root then return end
+
+    -- BodyVelocity удерживает заданную скорость и компенсирует гравитацию,
+    -- иначе персонаж постепенно проседает между обновлениями Heartbeat.
+    extraFlyMover = Instance.new("BodyVelocity")
+    extraFlyMover.Name = "SiriusExtraFlyVelocity"
+    extraFlyMover.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    extraFlyMover.P = 1e5
+    extraFlyMover.Velocity = Vector3.zero
+    extraFlyMover.Parent = root
+
     extraFlyConn = RunService.Heartbeat:Connect(function(dt)
-        local humanoid, root = GetHum(), GetRoot()
+        local h, currentRoot = GetHum(), GetRoot()
         local camera = workspace.CurrentCamera
-        if not humanoid or not root or not camera then return end
+        if not h or not currentRoot or not camera or not extraFlyMover then return end
+
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+        if look.Magnitude > 0.001 then look = look.Unit end
+        if right.Magnitude > 0.001 then right = right.Unit end
 
         local move = Vector3.zero
         if UIS.TouchEnabled and not UIS.KeyboardEnabled then
-            move = humanoid.MoveDirection
+            local md = h.MoveDirection
+            move = Vector3.new(md.X, 0, md.Z)
         else
-            if UIS:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.W) then move += look end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then move -= look end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then move += right end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then move -= right end
         end
 
         local vertical = 0
         if UIS:IsKeyDown(Enum.KeyCode.Space) then vertical += 1 end
         if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vertical -= 1 end
+        local horizontal = move.Magnitude > 0.001 and move.Unit * extraFlySpeed or Vector3.zero
 
         if mode == "Glide" then
-            -- Планирование: гасим падение, сохраняя горизонтальное управление.
-            local velocity = root.AssemblyLinearVelocity
-            local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
-            local target = move.Magnitude > 0 and move.Unit * extraFlySpeed or horizontal
-            root.AssemblyLinearVelocity = Vector3.new(target.X, math.max(velocity.Y, -8), target.Z)
-        elseif mode == "Jetpack" then
-            -- Подъём по Space, горизонтальное движение WASD.
-            local horizontal = move.Magnitude > 0 and move.Unit * extraFlySpeed or Vector3.zero
-            root.AssemblyLinearVelocity = Vector3.new(horizontal.X, vertical * extraFlySpeed, horizontal.Z)
-        elseif mode == "Velocity" then
-            local dir = move + Vector3.yAxis * vertical
-            root.AssemblyLinearVelocity = dir.Magnitude > 0 and dir.Unit * extraFlySpeed or Vector3.zero
+            local currentVelocity = currentRoot.AssemblyLinearVelocity
+            extraFlyMover.Velocity = Vector3.new(horizontal.X, math.max(currentVelocity.Y, -8), horizontal.Z)
+        else
+            extraFlyMover.Velocity = Vector3.new(horizontal.X, vertical * extraFlySpeed, horizontal.Z)
+        end
+
+        if look.Magnitude > 0.001 then
+            currentRoot.CFrame = CFrame.lookAt(currentRoot.Position, currentRoot.Position + look)
         end
     end)
 end
@@ -3473,15 +3492,17 @@ MoveTab:Slider("Скорость дополнительных полётов", 1
 end)
 OnUnload(StopExtraFly)
 
--- CFrame Fly: отключаем обычный прыжок Humanoid, чтобы Space
--- управлял только вертикальным перемещением самого полёта.
+-- CFrame Fly: BodyVelocity компенсирует гравитацию, а CFrame задаёт
+-- точное положение и поворот персонажа по горизонтальному направлению камеры.
 local cframeFlySpeed, cframeFlyConn = 60, nil
 local cframeOldAutoRotate, cframeOldJumping = nil, nil
+local cframeFlyMover = nil
 local function StopCFrameFly()
     if cframeFlyConn then
         cframeFlyConn:Disconnect()
         cframeFlyConn = nil
     end
+    if cframeFlyMover then cframeFlyMover:Destroy() cframeFlyMover = nil end
     local humanoid, root = GetHum(), GetRoot()
     if humanoid then
         if cframeOldAutoRotate ~= nil then humanoid.AutoRotate = cframeOldAutoRotate end
@@ -3498,24 +3519,31 @@ MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
     StopCFrameFly()
     if not on then return end
 
-    local humanoid = GetHum()
-    if humanoid then
-        cframeOldAutoRotate = humanoid.AutoRotate
-        cframeOldJumping = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping)
-        humanoid.AutoRotate = false
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-    end
+    local humanoid, root = GetHum(), GetRoot()
+    if not (humanoid and root) then return end
+    cframeOldAutoRotate = humanoid.AutoRotate
+    cframeOldJumping = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+    humanoid.AutoRotate = false
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+    humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+    cframeFlyMover = Instance.new("BodyVelocity")
+    cframeFlyMover.Name = "SiriusCFrameFlyVelocity"
+    cframeFlyMover.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    cframeFlyMover.P = 1e5
+    cframeFlyMover.Velocity = Vector3.zero
+    cframeFlyMover.Parent = root
 
     cframeFlyConn = RunService.RenderStepped:Connect(function(dt)
-        local h, root = GetHum(), GetRoot()
+        local h, currentRoot = GetHum(), GetRoot()
         local camera = workspace.CurrentCamera
-        if not (h and root and camera) then return end
+        if not (h and currentRoot and camera and cframeFlyMover) then return end
 
-        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        local cameraLook = camera.CFrame.LookVector
+        local look = Vector3.new(cameraLook.X, 0, cameraLook.Z)
         local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
-        if look.Magnitude > 0 then look = look.Unit end
-        if right.Magnitude > 0 then right = right.Unit end
+        if look.Magnitude > 0.001 then look = look.Unit end
+        if right.Magnitude > 0.001 then right = right.Unit end
 
         local direction = Vector3.zero
         if UIS.TouchEnabled and not UIS.KeyboardEnabled then
@@ -3531,12 +3559,17 @@ MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
             if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then direction -= Vector3.yAxis end
         end
 
-        local step = Vector3.zero
+        local delta = Vector3.zero
         if direction.Magnitude > 0.001 then
-            step = direction.Unit * cframeFlySpeed * math.clamp(dt, 0, 0.05)
+            delta = direction.Unit * cframeFlySpeed * math.clamp(dt, 0, 0.05)
         end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.CFrame = root.CFrame + step
+        local newPosition = currentRoot.Position + delta
+        cframeFlyMover.Velocity = Vector3.zero
+        if look.Magnitude > 0.001 then
+            currentRoot.CFrame = CFrame.lookAt(newPosition, newPosition + look)
+        else
+            currentRoot.CFrame = CFrame.new(newPosition)
+        end
         if h:GetState() ~= Enum.HumanoidStateType.Physics then
             h:ChangeState(Enum.HumanoidStateType.Physics)
         end
