@@ -997,7 +997,8 @@ end
 local function RunUrl(name, url)
     Notify("Загрузка", name .. "...", 1.5)
     local src = FetchSource(url)
-    if not src then error("не удалось скачать скрипт (ссылка недоступна?)", 0) end    src = src:gsub("^\239\187\191", "")
+    if not src then error("не удалось скачать скрипт (ссылка недоступна?)", 0) end
+    src = src:gsub("^\239\187\191", "")
     if string.find(string.sub(src, 1, 300):lower(), "^%s*<") then
         error("ссылка вернула HTML-страницу, а не Lua (скрипт удалён или заблокирован)", 0)
     end
@@ -1996,7 +1997,8 @@ do
     Add(RunService.Heartbeat:Connect(function(dt)
         fpsFrames += 1
         fpsElapsed += dt
-        if fpsElapsed >= 0.75 then            currentFPS = math.floor(fpsFrames / fpsElapsed)
+        if fpsElapsed >= 0.75 then
+            currentFPS = math.floor(fpsFrames / fpsElapsed)
             fpsFrames, fpsElapsed = 0, 0
         end
         dashClock += dt
@@ -2995,7 +2997,8 @@ RageTab:Toggle("Anti-Aim", false, function(on)
             yaw = base + math.pi
         elseif mode == "Spin" then
             spinAngle += math.rad(aa.speed)
-            yaw = spinAngle        elseif mode == "Jitter" then
+            yaw = spinAngle
+        elseif mode == "Jitter" then
             flip = -flip
             yaw = base + math.pi + math.rad(aa.jitter) * flip
         elseif mode == "Sideways" then
@@ -3994,7 +3997,8 @@ MoveTab:Toggle("Swim Fly (летать в воде/воздухе)", false, func
             direction = h.MoveDirection
             if h.Jump then direction += Vector3.yAxis end
         elseif cam then
-            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += cam.CFrame.LookVector end            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= cam.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.D) then direction += cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
@@ -4993,7 +4997,8 @@ VisualsTab:Toggle(VisualText("24 · Звёздные частицы", "24 · Sta
 end)
 VisualsTab:Toggle(VisualText("25 · Снежная атмосфера", "25 · Snow Atmosphere"), false, function(v)
     VFX.Snow = v
-    local c = LocalPlayer.Character    local r = c and c:FindFirstChild("HumanoidRootPart")
+    local c = LocalPlayer.Character
+    local r = c and c:FindFirstChild("HumanoidRootPart")
     if r then
         local old = r:FindFirstChild("SiriusLoader_Snow")
         if old then old:Destroy() end
