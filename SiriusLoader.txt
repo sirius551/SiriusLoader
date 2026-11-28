@@ -5154,6 +5154,56 @@ MiscTab:Button("Скопировать список игроков", function()
     CopyValue("Список игроков", table.concat(names, "\n"))
 end)
 
+MiscTab:Section("Покупки")
+local blockGamePassPrompts = false
+local gamePassHookInstalled = false
+local gamePassOldNamecall
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local function installGamePassPromptBlock()
+    if gamePassHookInstalled then return true end
+    if type(hookmetamethod) ~= "function" or type(newcclosure) ~= "function"
+        or type(getnamecallmethod) ~= "function" then
+        return false, "Executor не поддерживает необходимые hook-функции."
+    end
+
+    local ok, result = pcall(function()
+        gamePassOldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local fromGame = type(checkcaller) ~= "function" or not checkcaller()
+            if blockGamePassPrompts and self == MarketplaceService
+                and method == "PromptGamePassPurchase" and fromGame then
+                return nil
+            end
+            return gamePassOldNamecall(self, ...)
+        end))
+    end)
+    if not ok or type(gamePassOldNamecall) ~= "function" then
+        return false, tostring(result)
+    end
+    gamePassHookInstalled = true
+    return true
+end
+
+MiscTab:Toggle("Блокировать окна покупки Game Pass", false, function(on)
+    if on then
+        local ok, err = installGamePassPromptBlock()
+        if not ok then
+            blockGamePassPrompts = false
+            Notify("Блокировка Game Pass", "Не удалось включить: " .. tostring(err), 5, true)
+            return
+        end
+        blockGamePassPrompts = true
+        Notify("Блокировка Game Pass", "Окна покупки Game Pass блокируются на этом клиенте.", 3, true)
+    else
+        blockGamePassPrompts = false
+        Notify("Блокировка Game Pass", "Блокировка отключена.", 3, true)
+    end
+end)
+OnUnload(function()
+    blockGamePassPrompts = false
+end)
+
 MiscTab:Section("Локальные настройки")
 -- Draggable HUD widgets. Positions are kept for this session and can be moved
 -- with mouse or touch while the main menu remains open.
