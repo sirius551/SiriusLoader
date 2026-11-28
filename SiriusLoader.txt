@@ -1187,11 +1187,14 @@ local function CreateTab(name, icon)
     local tab = {Page = page, Items = {}, Order = 0}
     Tabs[name], TabButtons[name] = tab, btn
 
+    local tabHovered = false
     btn.MouseEnter:Connect(function()
-        if ActiveTab ~= name then Tween(btn, 0.15, {BackgroundColor3 = Theme.ElementHover}) end
+        tabHovered = true
+        if ActiveTab ~= name then btn.BackgroundColor3 = Theme.ElementHover end
     end)
     btn.MouseLeave:Connect(function()
-        if ActiveTab ~= name then Tween(btn, 0.15, {BackgroundColor3 = Theme.Element}) end
+        tabHovered = false
+        if ActiveTab ~= name then btn.BackgroundColor3 = Theme.Element end
     end)
     btn.MouseButton1Click:Connect(function() SelectTab(name) end)
 
@@ -1229,8 +1232,15 @@ local function CreateTab(name, icon)
         }, page)
         Round(b, 11)
         New("UIStroke", {Color = Theme.Accent, Transparency = 0.91, Thickness = 1}, b)
-        b.MouseEnter:Connect(function() Tween(b, 0.15, {BackgroundColor3 = Theme.ElementHover}) end)
-        b.MouseLeave:Connect(function() Tween(b, 0.15, {BackgroundColor3 = Theme.Element}) end)
+        local buttonHovered = false
+        b.MouseEnter:Connect(function()
+            buttonHovered = true
+            b.BackgroundColor3 = Theme.ElementHover
+        end)
+        b.MouseLeave:Connect(function()
+            buttonHovered = false
+            b.BackgroundColor3 = Theme.Element
+        end)
         local function run()
             task.spawn(function()
                 local ok, err = pcall(callback)
@@ -1242,7 +1252,11 @@ local function CreateTab(name, icon)
         end
         b.MouseButton1Click:Connect(function()
             Tween(b, 0.07, {BackgroundColor3 = Theme.Accent})
-            task.delay(0.12, function() Tween(b, 0.2, {BackgroundColor3 = Theme.Element}) end)
+            task.delay(0.12, function()
+                if b and b.Parent then
+                    b.BackgroundColor3 = buttonHovered and Theme.ElementHover or Theme.Element
+                end
+            end)
             run()
         end)
         if not nobind then
@@ -9843,11 +9857,42 @@ do
     local updateBusy, updateDialogOpen = false, false
 
     local function getLatestCommit()
-        local raw = FetchSource(UPDATE_API .. "&_=" .. tostring(os.time()))
-        if not raw then return nil end
+        local raw
+        local req = (syn and syn.request) or (http and http.request) or http_request or request
+        if type(req) == "function" then
+            local ok, response = pcall(req, {
+                Url = UPDATE_API .. "&_=" .. tostring(os.clock()),
+                Method = "GET",
+                Headers = {
+                    ["Accept"] = "application/vnd.github+json",
+                    ["Cache-Control"] = "no-cache, no-store",
+                    ["Pragma"] = "no-cache",
+                    ["User-Agent"] = "SiriusLoader",
+                },
+            })
+            if ok and type(response) == "table" then
+                local status = tonumber(response.StatusCode or response.Status)
+                if status and status ~= 200 then
+                    warn("[Sirius Update] GitHub API HTTP status: " .. tostring(status))
+                    return nil
+                end
+                if type(response.Body) == "string" then raw = response.Body end
+            elseif not ok then
+                warn("[Sirius Update] request failed: " .. tostring(response))
+            end
+        end
+        if not raw then raw = FetchSource(UPDATE_API .. "&_=" .. tostring(os.clock())) end
+        if type(raw) ~= "string" or #raw == 0 then return nil end
         local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
-        if not ok or type(data) ~= "table" or type(data[1]) ~= "table"
-            or type(data[1].sha) ~= "string" then return nil end
+        if not ok then
+            warn("[Sirius Update] API response is not valid JSON: " .. raw:sub(1, 180))
+            return nil
+        end
+        if type(data) ~= "table" or type(data[1]) ~= "table"
+            or type(data[1].sha) ~= "string" then
+            warn("[Sirius Update] Unexpected GitHub API response: " .. raw:sub(1, 180))
+            return nil
+        end
         return data[1].sha
     end
 
