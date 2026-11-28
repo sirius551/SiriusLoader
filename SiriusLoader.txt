@@ -3473,20 +3473,24 @@ MoveTab:Slider("Скорость дополнительных полётов", 1
 end)
 OnUnload(StopExtraFly)
 
--- CFrame Fly: горизонтальные направления выравниваются по плоскости земли,
--- вертикальное движение управляется только Space/Shift. Гравитация гасится.
+-- CFrame Fly: отключаем обычный прыжок Humanoid, чтобы Space
+-- управлял только вертикальным перемещением самого полёта.
 local cframeFlySpeed, cframeFlyConn = 60, nil
-local cframeOldAutoRotate = nil
+local cframeOldAutoRotate, cframeOldJumping = nil, nil
 local function StopCFrameFly()
     if cframeFlyConn then
         cframeFlyConn:Disconnect()
         cframeFlyConn = nil
     end
     local humanoid, root = GetHum(), GetRoot()
-    if humanoid and cframeOldAutoRotate ~= nil then
-        humanoid.AutoRotate = cframeOldAutoRotate
+    if humanoid then
+        if cframeOldAutoRotate ~= nil then humanoid.AutoRotate = cframeOldAutoRotate end
+        if cframeOldJumping ~= nil then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, cframeOldJumping)
+        end
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
-    cframeOldAutoRotate = nil
+    cframeOldAutoRotate, cframeOldJumping = nil, nil
     if root then root.AssemblyLinearVelocity = Vector3.zero end
 end
 
@@ -3497,7 +3501,10 @@ MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
     local humanoid = GetHum()
     if humanoid then
         cframeOldAutoRotate = humanoid.AutoRotate
+        cframeOldJumping = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping)
         humanoid.AutoRotate = false
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
     end
 
     cframeFlyConn = RunService.RenderStepped:Connect(function(dt)
@@ -3530,6 +3537,9 @@ MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
         end
         root.AssemblyLinearVelocity = Vector3.zero
         root.CFrame = root.CFrame + step
+        if h:GetState() ~= Enum.HumanoidStateType.Physics then
+            h:ChangeState(Enum.HumanoidStateType.Physics)
+        end
     end)
 end)
 OnUnload(StopCFrameFly)
