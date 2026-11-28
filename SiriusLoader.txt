@@ -3271,9 +3271,12 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         return
     end
 
-    -- Невидимая локальная платформа остаётся на высоте включения
-    -- и перемещается только по X/Z вслед за персонажем.
-    airWalkY = root.Position.Y - 3.15
+    -- Фиксируем высоту платформы в момент включения.
+    -- В дальнейшем она следует только за X/Z персонажа и не поднимается
+    -- вместе с ним во время прыжка.
+    local initialY = root.Position.Y
+    airWalkY = initialY - 3.15
+
     airWalkPlatform = Instance.new("Part")
     airWalkPlatform.Name = "SiriusAirWalkPlatform"
     airWalkPlatform.Size = Vector3.new(8, 0.5, 8)
@@ -3291,15 +3294,19 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
             stopAirWalk()
             return
         end
+
         local currentRoot = GetRoot()
         if not currentRoot then return end
+
+        -- Y намеренно не берётся из позиции персонажа:
+        -- иначе платформа будет повторять прыжок и не сможет его удержать.
         airWalkPlatform.CFrame = CFrame.new(
             currentRoot.Position.X,
             airWalkY,
             currentRoot.Position.Z
         )
     end)
-    Notify("Air Walk", "Ходьба по воздуху включена. Выключи переключатель, чтобы убрать платформу.", 3, true)
+    Notify("Air Walk", "Платформа сохраняет высоту включения и следует за персонажем по горизонтали.", 3, true)
 end)
 OnUnload(stopAirWalk)
 
