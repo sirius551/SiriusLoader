@@ -9067,10 +9067,14 @@ local function openGradientPalette(anchorButton)
     local anchorPos = anchorButton and anchorButton.AbsolutePosition or Vector2.new(18, 18)
     local anchorSize = anchorButton and anchorButton.AbsoluteSize or Vector2.new(0, 0)
     local popupWidth, popupHeight = 390, 410
-    local popupX = math.clamp(anchorPos.X, 8, math.max(8, viewport.X - popupWidth - 8))
-    local popupY = anchorPos.Y + anchorSize.Y + 8
-    if popupY + popupHeight > viewport.Y - 8 then popupY = anchorPos.Y - popupHeight - 8 end
-    popupY = math.clamp(popupY, 8, math.max(8, viewport.Y - popupHeight - 8))
+    local paletteScale = math.clamp(tonumber(Config.GradientPaletteScale) or 0.84, 0.65, 1.1)
+    local scaledWidth, scaledHeight = popupWidth * paletteScale, popupHeight * paletteScale
+    -- Открываем справа от кнопки; если справа не помещается, ставим слева.
+    local popupX = anchorPos.X + anchorSize.X + 12
+    if popupX + scaledWidth > viewport.X - 8 then popupX = anchorPos.X - scaledWidth - 12 end
+    popupX = math.clamp(popupX, 8, math.max(8, viewport.X - scaledWidth - 8))
+    local popupY = math.clamp(anchorPos.Y + anchorSize.Y * 0.5 - scaledHeight * 0.5, 8,
+        math.max(8, viewport.Y - scaledHeight - 8))
     local card = New("Frame", {
         AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(popupX, popupY),
         Size = UDim2.new(0, popupWidth, 0, popupHeight), BackgroundColor3 = Theme.Top,
@@ -9078,9 +9082,8 @@ local function openGradientPalette(anchorButton)
     }, overlay)
     Round(card, 16)
     New("UIStroke", {Color = Theme.Accent, Transparency = 0.35, Thickness = 1.4}, card)
-    local scale = New("UIScale", {Scale = 0.94}, card)
-    Tween(card, 0.24, {Position = UDim2.fromOffset(popupX, popupY)}, Enum.EasingStyle.Back)
-    Tween(scale, 0.24, {Scale = 1}, Enum.EasingStyle.Back)
+    local scale = New("UIScale", {Scale = paletteScale}, card)
+    Tween(scale, 0.22, {Scale = paletteScale}, Enum.EasingStyle.Back)
 
     local function label(parent, text, pos, size, color, textSize, bold)
         return New("TextLabel", {BackgroundTransparency=1, Position=pos, Size=size,
@@ -9088,11 +9091,61 @@ local function openGradientPalette(anchorButton)
             TextColor3=color or Theme.Text, TextSize=textSize or 12,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=803}, parent)
     end
-    label(card, "ЦВЕТОВАЯ ПАЛИТРА", UDim2.new(0,18,0,13), UDim2.new(1,-70,0,22), Theme.Text, 15, true)
+    local titleLabel = label(card, "ЦВЕТОВАЯ ПАЛИТРА", UDim2.new(0,18,0,13), UDim2.new(1,-150,0,22), Theme.Text, 15, true)
+    titleLabel.Active = true
+    local sizeDown = New("TextButton", {Text="−", Font=Enum.Font.GothamBold, TextSize=16,
+        TextColor3=Theme.Text, BackgroundColor3=Theme.Element, BorderSizePixel=0,
+        Position=UDim2.new(1,-108,0,10), Size=UDim2.new(0,26,0,30), ZIndex=804}, card)
+    Round(sizeDown, 8)
+    local sizeUp = New("TextButton", {Text="+", Font=Enum.Font.GothamBold, TextSize=16,
+        TextColor3=Theme.Text, BackgroundColor3=Theme.Element, BorderSizePixel=0,
+        Position=UDim2.new(1,-76,0,10), Size=UDim2.new(0,26,0,30), ZIndex=804}, card)
+    Round(sizeUp, 8)
     local close = New("TextButton", {Text="×", Font=Enum.Font.GothamBold, TextSize=20,
         TextColor3=Theme.SubText, BackgroundColor3=Theme.Element, BorderSizePixel=0,
         Position=UDim2.new(1,-42,0,10), Size=UDim2.new(0,30,0,30), ZIndex=804}, card)
     Round(close, 9)
+    local paletteDragging, dragStart, dragOrigin, dragInput = false, nil, nil, nil
+    titleLabel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            paletteDragging = true
+            dragStart = input.Position
+            dragOrigin = card.Position
+            dragInput = input
+        end
+    end)
+    titleLabel.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    local paletteMoveConn = UIS.InputChanged:Connect(function(input)
+        if paletteDragging and input == dragInput and dragStart and dragOrigin then
+            local delta = input.Position - dragStart
+            local nx = math.clamp(dragOrigin.X.Offset + delta.X, 8, math.max(8, viewport.X - scaledWidth - 8))
+            local ny = math.clamp(dragOrigin.Y.Offset + delta.Y, 8, math.max(8, viewport.Y - scaledHeight - 8))
+            card.Position = UDim2.fromOffset(nx, ny)
+        end
+    end)
+    local paletteEndConn = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            paletteDragging, dragInput = false, nil
+        end
+    end)
+    local function changePaletteScale(delta)
+        paletteScale = math.clamp(paletteScale + delta, 0.65, 1.1)
+        Config.GradientPaletteScale = paletteScale
+        SaveConfig()
+        scale.Scale = paletteScale
+        scaledWidth, scaledHeight = popupWidth * paletteScale, popupHeight * paletteScale
+        local pos = card.Position
+        card.Position = UDim2.fromOffset(
+            math.clamp(pos.X.Offset, 8, math.max(8, viewport.X - scaledWidth - 8)),
+            math.clamp(pos.Y.Offset, 8, math.max(8, viewport.Y - scaledHeight - 8))
+        )
+    end
+    sizeDown.MouseButton1Click:Connect(function() changePaletteScale(-0.05) end)
+    sizeUp.MouseButton1Click:Connect(function() changePaletteScale(0.05) end)
 
     local tabA = New("TextButton", {Text="ЦВЕТ 1", Font=Enum.Font.GothamBold, TextSize=11,
         TextColor3=Theme.Text, BackgroundColor3=Theme.Accent, BorderSizePixel=0,
@@ -9239,7 +9292,9 @@ local function openGradientPalette(anchorButton)
         closing=true
         moveConn:Disconnect()
         endConn:Disconnect()
-        Tween(card,0.16,{Position=UDim2.fromOffset(popupX, popupY + 10)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
+        paletteMoveConn:Disconnect()
+        paletteEndConn:Disconnect()
+        Tween(card,0.16,{Position=card.Position + UDim2.fromOffset(0, 10)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
         local shrink = Tween(scale,0.16,{Scale=0.94},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
         shrink.Completed:Wait()
         if overlay.Parent then overlay:Destroy() end
