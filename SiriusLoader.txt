@@ -1408,7 +1408,18 @@ local function CreateTab(name, icon)
         default = tonumber(default)
         if default == nil then default = min end
         default = math.clamp(default, min, max)
-        decimals = tonumber(decimals) or 0
+        decimals = tonumber(decimals)
+        if decimals == nil then
+            -- Автоматически сохраняем точность дробных диапазонов (например, 0.1–2 с default 0.25).
+            local function decimalPlaces(n)
+                local str = string.format("%.8f", math.abs(n))
+                str = str:gsub("0+$", ""):gsub("%.$", "")
+                local dot = str:find("%.")
+                return dot and (#str - dot) or 0
+            end
+            decimals = math.max(decimalPlaces(min), decimalPlaces(max), decimalPlaces(default))
+            decimals = math.min(decimals, 4)
+        end
         local value = default
         local f = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 54), LayoutOrder = nextOrder()}, page)
         Round(f, 10)
@@ -1441,7 +1452,11 @@ local function CreateTab(name, icon)
             value = fmt(math.clamp(v, min, max))
             local a = max == min and 0 or (value - min) / (max - min)
             fill.Size = UDim2.new(a, 0, 1, 0)
-            valLabel.Text = tostring(value)
+            local displayText = string.format("%." .. tostring(decimals) .. "f", value)
+            if decimals > 0 then
+                displayText = displayText:gsub("0+$", ""):gsub("%.$", "")
+            end
+            valLabel.Text = displayText
             if not silent then
                 local ok, err = pcall(callback, value)
                 if not ok then warn("[ScriptHub Slider Error]: " .. text .. " -> " .. tostring(err)) end
@@ -3644,12 +3659,15 @@ MoveTab:Toggle("Glide (планирование в воздухе)", false, func
 end)
 OnUnload(function() if glideConn then glideConn:Disconnect() end end)
 
-local jetConn, jetCharacterConn = nil, nil
+local jetConn, jetInputBegan, jetInputEnded, jetCharacterConn = nil, nil, nil, nil
 local jetForce = 55
-local jetEnabled = false
+local jetEnabled, jetSpaceHeld = false, false
 local function StopJetpack()
     jetEnabled = false
+    jetSpaceHeld = false
     if jetConn then jetConn:Disconnect() jetConn = nil end
+    if jetInputBegan then jetInputBegan:Disconnect() jetInputBegan = nil end
+    if jetInputEnded then jetInputEnded:Disconnect() jetInputEnded = nil end
     if jetCharacterConn then jetCharacterConn:Disconnect() jetCharacterConn = nil end
 end
 
@@ -3658,34 +3676,48 @@ MoveTab:Toggle("Jetpack (держи Space в воздухе)", false, function(o
     if not on then return end
     jetEnabled = true
 
+    -- Keyboard input is tracked explicitly instead of polling IsKeyDown every frame.
+    jetInputBegan = UIS.InputBegan:Connect(function(input, gameProcessed)
+        if input.KeyCode == Enum.KeyCode.Space and not gameProcessed then
+            jetSpaceHeld = true
+        end
+    end)
+    jetInputEnded = UIS.InputEnded:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.Space then
+            jetSpaceHeld = false
+        end
+    end)
+
     jetConn = RunService.Heartbeat:Connect(function(dt)
+        if not jetEnabled then return end
         local h, root = GetHum(), GetRoot()
         if not (h and root and h.Health > 0) then return end
 
+        local onTouchDevice = UIS.TouchEnabled and not UIS.KeyboardEnabled
+        local jumpHeld = onTouchDevice and h.Jump or jetSpaceHeld
+        local state = h:GetState()
         local inAir = h.FloorMaterial == Enum.Material.Air
-        local jumpHeld = false
-        if isMobile then
-            -- Touch jump is exposed by Humanoid.Jump while the mobile jump input is held.
-            jumpHeld = h.Jump
-        else
-            jumpHeld = UIS:IsKeyDown(Enum.KeyCode.Space) and not UIS:GetFocusedTextBox()
-        end
+            or state == Enum.HumanoidStateType.Jumping
+            or state == Enum.HumanoidStateType.Freefall
+            or state == Enum.HumanoidStateType.FallingDown
 
         if inAir and jumpHeld then
             local velocity = root.AssemblyLinearVelocity
+            local step = math.clamp(tonumber(dt) or 0, 0, 0.05)
+            local lift = jetForce * step
             root.AssemblyLinearVelocity = Vector3.new(
                 velocity.X,
-                math.min(velocity.Y + jetForce * math.clamp(dt, 0, 0.05), 45),
+                math.clamp(velocity.Y + lift, -25, 55),
                 velocity.Z
             )
         end
     end)
 
     jetCharacterConn = LocalPlayer.CharacterAdded:Connect(function()
-        -- Heartbeat resolves GetHum/GetRoot dynamically, so it binds to the new character.
+        jetSpaceHeld = false
     end)
 end)
-MoveTab:Slider("Сила Jetpack", 10, 120, 55, function(v) jetForce = v end)
+MoveTab:Slider("Сила Jetpack", 10, 120, 55, function(v) jetForce = tonumber(v) or 55 end)
 OnUnload(StopJetpack)
 
 MoveTab:Section("Телепорты и маркеры")
