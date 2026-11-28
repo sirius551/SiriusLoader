@@ -997,8 +997,7 @@ end
 local function RunUrl(name, url)
     Notify("Загрузка", name .. "...", 1.5)
     local src = FetchSource(url)
-    if not src then error("не удалось скачать скрипт (ссылка недоступна?)", 0) end
-    src = src:gsub("^\239\187\191", "")
+    if not src then error("не удалось скачать скрипт (ссылка недоступна?)", 0) end    src = src:gsub("^\239\187\191", "")
     if string.find(string.sub(src, 1, 300):lower(), "^%s*<") then
         error("ссылка вернула HTML-страницу, а не Lua (скрипт удалён или заблокирован)", 0)
     end
@@ -1766,11 +1765,176 @@ do
         infoLabel.Text = "Информация о выбранном игроке появится здесь"
     end, true)
 
+    -- ==================== TARGET: ORBIT ====================
+    TargetTab:Section("Орбита")
+    local orbitCfg = { speed = 1.2, distance = 6, active = false, conn = nil, angle = 0 }
+    TargetTab:Slider("Скорость орбиты", 0.1, 6, 1.2, function(v) orbitCfg.speed = v end, 1)
+    TargetTab:Slider("Радиус орбиты (studs)", 2, 20, 6, function(v) orbitCfg.distance = v end, 1)
+    TargetTab:Toggle("Орбита вокруг цели", false, function(on)
+        orbitCfg.active = on
+        if orbitCfg.conn then orbitCfg.conn:Disconnect() orbitCfg.conn = nil end
+        if not on then return end
+        orbitCfg.angle = 0
+        orbitCfg.conn = RunService.Heartbeat:Connect(function(dt)
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            orbitCfg.angle = orbitCfg.angle + orbitCfg.speed * dt
+            local ox = math.cos(orbitCfg.angle) * orbitCfg.distance
+            local oz = math.sin(orbitCfg.angle) * orbitCfg.distance
+            local targetPos = tr.Position + Vector3.new(ox, 0, oz)
+            r.CFrame = CFrame.new(targetPos, tr.Position)
+        end)
+        Notify("Target", "Орбита активирована", 1.5)
+    end)
+    OnUnload(function() if orbitCfg.conn then orbitCfg.conn:Disconnect() end end)
+
+    -- ==================== TARGET: HOVER ABOVE ====================
+    TargetTab:Section("Позиционирование")
+    local hoverAboveCfg = { height = 10, active = false, conn = nil }
+    TargetTab:Slider("Высота над целью (studs)", 2, 40, 10, function(v) hoverAboveCfg.height = v end, 1)
+    TargetTab:Toggle("Парить над целью", false, function(on)
+        hoverAboveCfg.active = on
+        if hoverAboveCfg.conn then hoverAboveCfg.conn:Disconnect() hoverAboveCfg.conn = nil end
+        if not on then return end
+        hoverAboveCfg.conn = RunService.Heartbeat:Connect(function()
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            r.CFrame = CFrame.new(tr.Position + Vector3.new(0, hoverAboveCfg.height, 0))
+        end)
+        Notify("Target", "Парение над целью включено", 1.5)
+    end)
+    OnUnload(function() if hoverAboveCfg.conn then hoverAboveCfg.conn:Disconnect() end end)
+
+    -- ==================== TARGET: HOVER BEHIND ====================
+    local hoverBehindCfg = { distance = 3.5, active = false, conn = nil }
+    TargetTab:Slider("Дистанция за спиной (studs)", 1, 15, 3.5, function(v) hoverBehindCfg.distance = v end, 1)
+    TargetTab:Toggle("Держаться за спиной цели", false, function(on)
+        hoverBehindCfg.active = on
+        if hoverBehindCfg.conn then hoverBehindCfg.conn:Disconnect() hoverBehindCfg.conn = nil end
+        if not on then return end
+        hoverBehindCfg.conn = RunService.Heartbeat:Connect(function()
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            -- позиция за спиной цели (по её LookVector)
+            local behindPos = tr.CFrame * CFrame.new(0, 0, hoverBehindCfg.distance)
+            r.CFrame = CFrame.new(behindPos.Position, tr.Position)
+        end)
+        Notify("Target", "Слежение за спиной включено", 1.5)
+    end)
+    OnUnload(function() if hoverBehindCfg.conn then hoverBehindCfg.conn:Disconnect() end end)
+
+    -- ==================== TARGET: TELEPORT TO TARGET ====================
+    TargetTab:Button("Телепортироваться к цели", function()
+        local p = resolveTarget()
+        local r = GetRoot()
+        if not (p and r) then error("Сначала выбери игрока", 0) end
+        local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+        if not tr then error("Персонаж игрока пока недоступен", 0) end
+        r.CFrame = tr.CFrame * CFrame.new(0, 0, 3)
+        Notify("Target", "Телепортация к " .. p.Name, 1.5)
+    end, true)
+
+    -- ==================== TARGET: FACE LOCK ====================
+    TargetTab:Section("Слежение")
+    local faceLockCfg = { active = false, conn = nil }
+    TargetTab:Toggle("Face Lock — смотреть на цель", false, function(on)
+        faceLockCfg.active = on
+        if faceLockCfg.conn then faceLockCfg.conn:Disconnect() faceLockCfg.conn = nil end
+        if not on then return end
+        faceLockCfg.conn = RunService.Heartbeat:Connect(function()
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            r.CFrame = CFrame.new(r.Position, Vector3.new(tr.Position.X, r.Position.Y, tr.Position.Z))
+        end)
+        Notify("Target", "Face Lock включён", 1.5)
+    end)
+    OnUnload(function() if faceLockCfg.conn then faceLockCfg.conn:Disconnect() end end)
+
+    -- ==================== TARGET: DISTANCE KEEPER ====================
+    local distKeeperCfg = { distance = 8, active = false, conn = nil }
+    TargetTab:Slider("Дистанция удержания (studs)", 2, 30, 8, function(v) distKeeperCfg.distance = v end, 1)
+    TargetTab:Toggle("Держать дистанцию до цели", false, function(on)
+        distKeeperCfg.active = on
+        if distKeeperCfg.conn then distKeeperCfg.conn:Disconnect() distKeeperCfg.conn = nil end
+        if not on then return end
+        distKeeperCfg.conn = RunService.Heartbeat:Connect(function()
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            local dir = (r.Position - tr.Position)
+            local mag = dir.Magnitude
+            if mag < 0.1 then return end
+            local keepPos = tr.Position + (dir / mag) * distKeeperCfg.distance
+            r.CFrame = CFrame.new(Vector3.new(keepPos.X, r.Position.Y, keepPos.Z), Vector3.new(tr.Position.X, r.Position.Y, tr.Position.Z))
+        end)
+        Notify("Target", "Distance Keeper включён", 1.5)
+    end)
+    OnUnload(function() if distKeeperCfg.conn then distKeeperCfg.conn:Disconnect() end end)
+
+    -- ==================== TARGET: MIRROR (зеркальное отражение) ====================
+    TargetTab:Section("Прочее")
+    local mirrorCfg = { active = false, conn = nil }
+    TargetTab:Toggle("Mirror — повторять движения цели", false, function(on)
+        mirrorCfg.active = on
+        if mirrorCfg.conn then mirrorCfg.conn:Disconnect() mirrorCfg.conn = nil end
+        if not on then return end
+        mirrorCfg.conn = RunService.Heartbeat:Connect(function()
+            local p = resolveTarget()
+            local r = GetRoot()
+            if not (p and r) then return end
+            local tr = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            if not tr then return end
+            -- зеркалим позицию (противоположная сторона от взгляда цели)
+            local mirrorPos = tr.CFrame * CFrame.new(0, 0, -6)
+            r.CFrame = CFrame.new(mirrorPos.Position, tr.Position)
+        end)
+        Notify("Target", "Mirror включён", 1.5)
+    end)
+    OnUnload(function() if mirrorCfg.conn then mirrorCfg.conn:Disconnect() end end)
+
+    TargetTab:Button("Скопировать ник цели в буфер", function()
+        local p = resolveTarget()
+        if not p then error("Сначала выбери игрока", 0) end
+        if setclipboard then
+            setclipboard(p.Name)
+            Notify("Target", "Скопировано: " .. p.Name, 2)
+        else
+            Notify("Target", "setclipboard недоступен в этом экзекьюторе", 2)
+        end
+    end, true)
+
     local playerAddedConn = Players.PlayerAdded:Connect(refreshTargetList)
     local playerRemovingConn = Players.PlayerRemoving:Connect(function(p)
         if selectedTarget == p then
             selectedTarget = nil
             targetDropdown.Text = "Цель вышла из игры"
+            -- сбрасываем все активные режимы если цель вышла
+            orbitCfg.active = false
+            if orbitCfg.conn then orbitCfg.conn:Disconnect() orbitCfg.conn = nil end
+            hoverAboveCfg.active = false
+            if hoverAboveCfg.conn then hoverAboveCfg.conn:Disconnect() hoverAboveCfg.conn = nil end
+            hoverBehindCfg.active = false
+            if hoverBehindCfg.conn then hoverBehindCfg.conn:Disconnect() hoverBehindCfg.conn = nil end
+            faceLockCfg.active = false
+            if faceLockCfg.conn then faceLockCfg.conn:Disconnect() faceLockCfg.conn = nil end
+            distKeeperCfg.active = false
+            if distKeeperCfg.conn then distKeeperCfg.conn:Disconnect() distKeeperCfg.conn = nil end
+            mirrorCfg.active = false
+            if mirrorCfg.conn then mirrorCfg.conn:Disconnect() mirrorCfg.conn = nil end
         end
         refreshTargetList()
     end)
@@ -1832,8 +1996,7 @@ do
     Add(RunService.Heartbeat:Connect(function(dt)
         fpsFrames += 1
         fpsElapsed += dt
-        if fpsElapsed >= 0.75 then
-            currentFPS = math.floor(fpsFrames / fpsElapsed)
+        if fpsElapsed >= 0.75 then            currentFPS = math.floor(fpsFrames / fpsElapsed)
             fpsFrames, fpsElapsed = 0, 0
         end
         dashClock += dt
@@ -2832,8 +2995,7 @@ RageTab:Toggle("Anti-Aim", false, function(on)
             yaw = base + math.pi
         elseif mode == "Spin" then
             spinAngle += math.rad(aa.speed)
-            yaw = spinAngle
-        elseif mode == "Jitter" then
+            yaw = spinAngle        elseif mode == "Jitter" then
             flip = -flip
             yaw = base + math.pi + math.rad(aa.jitter) * flip
         elseif mode == "Sideways" then
@@ -3832,8 +3994,7 @@ MoveTab:Toggle("Swim Fly (летать в воде/воздухе)", false, func
             direction = h.MoveDirection
             if h.Jump then direction += Vector3.yAxis end
         elseif cam then
-            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += cam.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += cam.CFrame.LookVector end            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= cam.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.D) then direction += cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
@@ -4832,8 +4993,7 @@ VisualsTab:Toggle(VisualText("24 · Звёздные частицы", "24 · Sta
 end)
 VisualsTab:Toggle(VisualText("25 · Снежная атмосфера", "25 · Snow Atmosphere"), false, function(v)
     VFX.Snow = v
-    local c = LocalPlayer.Character
-    local r = c and c:FindFirstChild("HumanoidRootPart")
+    local c = LocalPlayer.Character    local r = c and c:FindFirstChild("HumanoidRootPart")
     if r then
         local old = r:FindFirstChild("SiriusLoader_Snow")
         if old then old:Destroy() end
@@ -5832,7 +5992,6 @@ local function applyAccentDirect(color)
     for _, toggle in ipairs(Toggles) do toggle.Render() end
 end
 MiscTab:Label("Инструменты этой вкладки работают локально и не меняют состояние других игроков.")
-
 end
 -- ==================== PLAYER ====================
 do
@@ -6832,8 +6991,7 @@ local function playEmoteById(assetId)
                 track:Play()
             end
         end)
-    end
-    return track
+    end    return track
 end
 
 local function playEmoteByName(name)
@@ -7832,8 +7990,7 @@ WorldTab:Toggle("Remote Spy (лог всех RemoteEvent)", false, function(on)
                 local line = r:GetFullName() .. " \f " .. (ok and res or "?"):sub(1, 80)
                 table.insert(spyLog, 1, line)
                 if #spyLog > 30 then table.remove(spyLog) end
-            end)
-        end)
+            end)        end)
     end
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then hookRemote(v) end
@@ -8832,8 +8989,7 @@ ClientTab:Toggle("35. Монитор пинга (график)", false, function
     for i = 1, 20 do
         local b = New("Frame", {
             BackgroundColor3=Color3.fromRGB(80,200,120), BorderSizePixel=0,
-            AnchorPoint=Vector2.new(0,1), Position=UDim2.new((i-1)/20,1,1,-4),
-            Size=UDim2.new(1/20,-2,0,0), ZIndex=23,
+            AnchorPoint=Vector2.new(0,1), Position=UDim2.new((i-1)/20,1,1,-4),            Size=UDim2.new(1/20,-2,0,0), ZIndex=23,
         }, bg)
         table.insert(bars, b)
     end
@@ -9832,8 +9988,7 @@ SettingsTab:Button("Случайный цвет интерфейса", function(
     Config.AccentMode = "solid"
     refreshAccentMode()
     ApplyAccent(color, true)
-    Notify("Случайный HEX", hex, 3, true)
-end)
+    Notify("Случайный HEX", hex, 3, true)end)
 
 SettingsTab:Section("Внешний вид окна")
 local sT = SettingsTab:Slider("Прозрачность фона", 0, 0.85, Config.Transparency, function(v)
