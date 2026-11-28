@@ -3271,26 +3271,34 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         return
     end
 
-    -- Ставим платформу сразу под ногами, а не на фиксированную высоту
-    -- ниже центра персонажа. Так она успевает подхватить персонажа при включении.
     local humanoid = GetHum()
-    local hipHeight = humanoid and humanoid.HipHeight or 2
-    local platformTopY = root.Position.Y - hipHeight - (root.Size.Y * 0.5) + 0.12
-    airWalkY = platformTopY - 0.25
+    local platformHeight = 0.5
+    local function getFootPlatformY(currentRoot)
+        local currentHumanoid = GetHum()
+        local hipHeight = currentHumanoid and currentHumanoid.HipHeight or 2
+        local feetY = currentRoot.Position.Y - hipHeight - (currentRoot.Size.Y * 0.5)
+        return feetY - (platformHeight * 0.5) + 0.08
+    end
+
+    airWalkY = getFootPlatformY(root)
 
     airWalkPlatform = Instance.new("Part")
     airWalkPlatform.Name = "SiriusAirWalkPlatform"
-    airWalkPlatform.Size = Vector3.new(8, 0.5, 8)
+    airWalkPlatform.Size = Vector3.new(8, platformHeight, 8)
     airWalkPlatform.CFrame = CFrame.new(root.Position.X, airWalkY, root.Position.Z)
     airWalkPlatform.Transparency = 1
     airWalkPlatform.Anchored = true
     airWalkPlatform.CanCollide = true
-    airWalkPlatform.CanTouch = false
-    airWalkPlatform.CanQuery = false
+    airWalkPlatform.CanTouch = true
+    airWalkPlatform.CanQuery = true
     airWalkPlatform.CastShadow = false
     airWalkPlatform.Parent = workspace
 
-    airWalkConn = RunService.Heartbeat:Connect(function()
+    -- Пока персонаж набирает высоту прыжком, платформа поднимается
+    -- вместе с ним. На вершине прыжка фиксируется и ловит персонажа
+    -- при снижении. После этого перемещается только по горизонтали.
+    local rising = false
+    airWalkConn = RunService.Stepped:Connect(function()
         if not airWalkPlatform or not airWalkPlatform.Parent then
             stopAirWalk()
             return
@@ -3299,14 +3307,22 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         local currentRoot = GetRoot()
         if not currentRoot then return end
 
-        -- Платформа удерживает исходный уровень по Y и следует только по X/Z.
+        local verticalSpeed = currentRoot.AssemblyLinearVelocity.Y
+        if verticalSpeed > 1 then
+            rising = true
+            airWalkY = getFootPlatformY(currentRoot)
+        elseif rising then
+            rising = false
+            airWalkY = getFootPlatformY(currentRoot)
+        end
+
         airWalkPlatform.CFrame = CFrame.new(
             currentRoot.Position.X,
             airWalkY,
             currentRoot.Position.Z
         )
     end)
-    Notify("Air Walk", "Платформа создана непосредственно под ногами и удерживает высоту включения.", 3, true)
+    Notify("Air Walk", "Платформа поднимается вместе с прыжком и фиксируется на его вершине.", 3, true)
 end)
 OnUnload(stopAirWalk)
 
