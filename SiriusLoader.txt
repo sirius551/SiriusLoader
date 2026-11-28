@@ -5331,14 +5331,29 @@ local function applyAccentDirect(color)
     for _, toggle in ipairs(Toggles) do toggle.Render() end
 end
 MiscTab:Section("Кастомизация оформления")
-MiscTab:Button("Режим акцента: " .. tostring(accentMode), function()
+local function accentModeLabel(mode)
+    local labels = {
+        solid = "Однотонный",
+        rainbow = "Радужный",
+        gradient = "Градиент",
+    }
+    return labels[mode] or "Однотонный"
+end
+if accentMode ~= "solid" and accentMode ~= "rainbow" and accentMode ~= "gradient" then
+    accentMode = "solid"
+end
+local accentModeButton
+accentModeButton = MiscTab:Button("Режим акцента: " .. accentModeLabel(accentMode), function()
     local modes = {"solid", "rainbow", "gradient"}
     local index = table.find(modes, accentMode) or 1
     accentMode = modes[index % #modes + 1]
     Config.AccentMode = accentMode
+    if accentModeButton and accentModeButton.Parent then
+        accentModeButton.Text = "Режим акцента: " .. accentModeLabel(accentMode)
+    end
     refreshAccentMode()
     SaveConfig()
-    Notify("Оформление", "Режим: " .. accentMode, 2)
+    Notify("Оформление", "Режим: " .. accentModeLabel(accentMode), 2)
 end)
 local gradABox = MiscTab:Input("Первый цвет градиента (#RRGGBB)", "#000000", function(t)
     local c = parseHexColor(t)
