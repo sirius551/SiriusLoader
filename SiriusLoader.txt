@@ -1401,8 +1401,15 @@ local function CreateTab(name, icon)
     end
 
     function tab:Slider(text, min, max, default, callback, decimals)
-        decimals = decimals or 0
-        local value = math.clamp(default, min, max)
+        -- Защита от nil/строк в конфиге и аргументах слайдера.
+        min = tonumber(min) or 0
+        max = tonumber(max) or min
+        if max < min then min, max = max, min end
+        default = tonumber(default)
+        if default == nil then default = min end
+        default = math.clamp(default, min, max)
+        decimals = tonumber(decimals) or 0
+        local value = default
         local f = New("Frame", {BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.08, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 54), LayoutOrder = nextOrder()}, page)
         Round(f, 10)
         New("UIStroke", {Color = Theme.Accent, Transparency = 0.93, Thickness = 1}, f)
@@ -1430,8 +1437,9 @@ local function CreateTab(name, icon)
         end
         local obj = {Kind = "slider", Min = min, Max = max}
         local function setValue(v, silent)
+            v = tonumber(v) or value or min
             value = fmt(math.clamp(v, min, max))
-            local a = (value - min) / (max - min)
+            local a = max == min and 0 or (value - min) / (max - min)
             fill.Size = UDim2.new(a, 0, 1, 0)
             valLabel.Text = tostring(value)
             if not silent then
@@ -9000,6 +9008,7 @@ sR.OnRelease, sG.OnRelease, sB.OnRelease = SaveConfig, SaveConfig, SaveConfig
 
 
 SettingsTab:Section("Кастомизация оформления")
+local gradientSpeed = tonumber(Config.GradientSpeed) or 0.25
 local function accentModeLabel(mode)
     local labels = {
         solid = "Однотонный",
@@ -10090,10 +10099,27 @@ do
         end
 
         updateBusy = true
-        local source = FetchSource(UPDATE_RAW .. "?v=" .. tostring(os.time()))
+        local cacheBust = tostring(os.time()) .. "-" .. tostring(math.floor(os.clock() * 1000000))
+        local source = FetchSource(UPDATE_RAW .. "?v=" .. cacheBust)
+        -- Последний резервный источник: jsDelivr CDN (ветки могут кешироваться до 12 часов).
+        if not source or #source < 1000 or source:sub(1, 1) == "<" then
+            local cdnUrl = "https://cdn.jsdelivr.net/gh/sirius551/SiriusLoader@main/SiriusLoader.txt?nocache=" .. cacheBust
+            local req = (syn and syn.request) or (http and http.request) or http_request or request
+            if type(req) == "function" then
+                local ok, response = pcall(req, {
+                    Url = cdnUrl, Method = "GET",
+                    Headers = {["Cache-Control"] = "no-cache, no-store", ["Pragma"] = "no-cache"}
+                })
+                if ok and type(response) == "table" and tonumber(response.StatusCode or response.Status) == 200
+                    and type(response.Body) == "string" then source = response.Body end
+            end
+            if not source or #source < 1000 or source:sub(1, 1) == "<" then
+                source = FetchSource(cdnUrl)
+            end
+        end
         if not source or #source < 1000 or source:sub(1, 1) == "<" then
             updateBusy = false
-            Notify("Обновление", "Не удалось скачать новую версию с GitHub.", 5, true)
+            Notify("Обновление", "Не удалось скачать новую версию ни с GitHub, ни с jsDelivr CDN.", 5, true)
             return
         end
         local snapshot = SnapshotState()
