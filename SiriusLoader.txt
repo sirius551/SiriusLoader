@@ -3234,6 +3234,60 @@ MoveTab:Toggle("Noclip", false, function(on)
 end)
 OnUnload(function() if noclipConn then noclipConn:Disconnect() end end)
 
+MoveTab:Section("Хождение по воздуху")
+local airWalkConn, airWalkPlatform = nil, nil
+local airWalkY = nil
+local function stopAirWalk()
+    if airWalkConn then airWalkConn:Disconnect() airWalkConn = nil end
+    if airWalkPlatform then
+        pcall(function() airWalkPlatform:Destroy() end)
+        airWalkPlatform = nil
+    end
+    airWalkY = nil
+end
+
+MoveTab:Toggle("Ходьба по воздуху", false, function(on)
+    stopAirWalk()
+    if not on then return end
+
+    local root = GetRoot()
+    if not root then
+        Notify("Air Walk", "Персонаж ещё не загружен.", 3, true)
+        return
+    end
+
+    -- Невидимая локальная платформа остаётся на высоте включения
+    -- и перемещается только по X/Z вслед за персонажем.
+    airWalkY = root.Position.Y - 3.15
+    airWalkPlatform = Instance.new("Part")
+    airWalkPlatform.Name = "SiriusAirWalkPlatform"
+    airWalkPlatform.Size = Vector3.new(8, 0.5, 8)
+    airWalkPlatform.CFrame = CFrame.new(root.Position.X, airWalkY, root.Position.Z)
+    airWalkPlatform.Transparency = 1
+    airWalkPlatform.Anchored = true
+    airWalkPlatform.CanCollide = true
+    airWalkPlatform.CanTouch = false
+    airWalkPlatform.CanQuery = false
+    airWalkPlatform.CastShadow = false
+    airWalkPlatform.Parent = workspace
+
+    airWalkConn = RunService.Heartbeat:Connect(function()
+        if not airWalkPlatform or not airWalkPlatform.Parent then
+            stopAirWalk()
+            return
+        end
+        local currentRoot = GetRoot()
+        if not currentRoot then return end
+        airWalkPlatform.CFrame = CFrame.new(
+            currentRoot.Position.X,
+            airWalkY,
+            currentRoot.Position.Z
+        )
+    end)
+    Notify("Air Walk", "Ходьба по воздуху включена. Выключи переключатель, чтобы убрать платформу.", 3, true)
+end)
+OnUnload(stopAirWalk)
+
 MoveTab:Section("Полёт и прочее")
 local flySpeed, flyConn, flyBV, flyBG = 60, nil, nil, nil
 local function StopFly()
