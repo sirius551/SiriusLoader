@@ -5363,7 +5363,6 @@ MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed,
 end, 2)
  
 -- Визуальная палитра для двух точек градиента. HEX-поля остаются как точный ввод.
-local paletteButton = MiscTab:Button("Открыть палитру цветов", function() end)
 local function openGradientPalette()
     if ScreenGui:FindFirstChild("SiriusGradientPaletteOverlay") then return end
     local selected = "A"
@@ -5569,7 +5568,7 @@ local function openGradientPalette()
     end)
     refreshPreview()
 end
-paletteButton = MiscTab:Button("🎨 Открыть палитру цветов", openGradientPalette)
+MiscTab:Button("🎨 Открыть палитру цветов", openGradientPalette)
 
 local gradientConn
 refreshAccentMode = function()
