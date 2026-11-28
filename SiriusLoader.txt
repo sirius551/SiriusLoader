@@ -3411,6 +3411,48 @@ end)
 OnUnload(StopFly)
 MoveTab:Slider("Скорость полёта", 10, 300, 60, function(v) flySpeed = v end)
 
+-- Отдельный CFrame Fly, не использует BodyVelocity/BodyGyro.
+local cframeFlySpeed, cframeFlyConn = 60, nil
+local function StopCFrameFly()
+    if cframeFlyConn then
+        cframeFlyConn:Disconnect()
+        cframeFlyConn = nil
+    end
+end
+
+MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
+    StopCFrameFly()
+    if not on then return end
+
+    cframeFlyConn = RunService.RenderStepped:Connect(function(dt)
+        local humanoid, root = GetHum(), GetRoot()
+        local camera = workspace.CurrentCamera
+        if not (humanoid and root and camera) then return end
+
+        local direction = Vector3.zero
+        if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+            direction = humanoid.MoveDirection
+            if humanoid.Jump then direction += Vector3.yAxis end
+        else
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then direction -= Vector3.yAxis end
+        end
+
+        if direction.Magnitude > 0 then
+            local step = direction.Unit * cframeFlySpeed * math.min(dt, 0.05)
+            root.CFrame = root.CFrame + step
+        end
+    end)
+end)
+OnUnload(StopCFrameFly)
+MoveTab:Slider("Скорость CFrame Fly", 10, 300, 60, function(v)
+    cframeFlySpeed = v
+end)
+
 local origGravity = workspace.Gravity
 local gravitySliderValue = math.floor(origGravity)
 local zeroGravityEnabled, x4GravityEnabled = false, false
