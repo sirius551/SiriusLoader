@@ -10139,6 +10139,7 @@ end, true)
 
 SettingsTab:Section("О хабе")
 SettingsTab:Label("SiriusLoader v3 | " .. Author)
+SettingsTab:Label("Тестер: Sigmamen (kiborgtol)")
 SettingsTab:Label("Executor: " .. (function() local n = "unknown" pcall(function() n = identifyexecutor() end) return n end)())
 
 end
