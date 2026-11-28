@@ -3271,13 +3271,14 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         return
     end
 
-    local humanoid = GetHum()
     local platformHeight = 0.5
+    local clearance = 0.2
     local function getFootPlatformY(currentRoot)
         local currentHumanoid = GetHum()
         local hipHeight = currentHumanoid and currentHumanoid.HipHeight or 2
         local feetY = currentRoot.Position.Y - hipHeight - (currentRoot.Size.Y * 0.5)
-        return feetY - (platformHeight * 0.5) + 0.08
+        -- Верх платформы остаётся немного НИЖЕ ступней, чтобы не толкать персонажа.
+        return feetY - clearance - (platformHeight * 0.5)
     end
 
     airWalkY = getFootPlatformY(root)
@@ -3288,15 +3289,14 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
     airWalkPlatform.CFrame = CFrame.new(root.Position.X, airWalkY, root.Position.Z)
     airWalkPlatform.Transparency = 1
     airWalkPlatform.Anchored = true
-    airWalkPlatform.CanCollide = true
-    airWalkPlatform.CanTouch = true
+    -- Пока игрок стоит или набирает высоту прыжком, платформа не сталкивается
+    -- с персонажем. Коллизия включается только после фиксации на вершине.
+    airWalkPlatform.CanCollide = false
+    airWalkPlatform.CanTouch = false
     airWalkPlatform.CanQuery = true
     airWalkPlatform.CastShadow = false
     airWalkPlatform.Parent = workspace
 
-    -- Вертикально двигаем платформу только после реального Jumping.
-    -- Одна лишь скорость Y ненадёжна: физические колебания стоящего
-    -- персонажа могут ошибочно запускать подъём платформы.
     local jumpTracking = false
     airWalkConn = RunService.Stepped:Connect(function()
         if not airWalkPlatform or not airWalkPlatform.Parent then
@@ -3311,18 +3311,21 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
         local state = currentHumanoid:GetState()
         local verticalSpeed = currentRoot.AssemblyLinearVelocity.Y
 
-        if state == Enum.HumanoidStateType.Jumping then
+        if state == Enum.HumanoidStateType.Jumping and not jumpTracking then
             jumpTracking = true
+            airWalkPlatform.CanCollide = false
         end
 
         if jumpTracking then
             if verticalSpeed > 0.5 then
+                -- Следуем под ногами только пока персонаж действительно поднимается.
                 airWalkY = getFootPlatformY(currentRoot)
             else
-                -- На вершине прыжка фиксируем платформу. Не продолжаем
-                -- поднимать её из-за небольших колебаний скорости.
-                jumpTracking = false
+                -- На вершине фиксируем платформу с зазором под ступнями и
+                -- только теперь включаем коллизию, чтобы поймать падение.
                 airWalkY = getFootPlatformY(currentRoot)
+                jumpTracking = false
+                airWalkPlatform.CanCollide = true
             end
         end
 
@@ -3332,7 +3335,7 @@ MoveTab:Toggle("Ходьба по воздуху", false, function(on)
             currentRoot.Position.Z
         )
     end)
-    Notify("Air Walk", "Платформа меняет высоту только во время настоящего прыжка.", 3, true)
+    Notify("Air Walk", "Платформа не сталкивается с персонажем в покое и включается после прыжка.", 3, true)
 end)
 OnUnload(stopAirWalk)
 
