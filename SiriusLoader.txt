@@ -5125,6 +5125,7 @@ end)
 
 end
 -- ==================== MISC ====================
+local updateAccentGradients -- Shared with Settings accent controls below.
 do
 MiscTab:Section("Информация и инструменты")
 MiscTab:Button("Скопировать PlaceId", function()
@@ -5404,7 +5405,7 @@ local function parseHexColor(value)
     if #hex ~= 6 or not hex:match("^%x%x%x%x%x%x$") then return nil end
     return Color3.fromRGB(tonumber(hex:sub(1,2),16), tonumber(hex:sub(3,4),16), tonumber(hex:sub(5,6),16))
 end
-local function updateAccentGradients(colorA, colorB, remove)
+updateAccentGradients = function(colorA, colorB, remove)
     local alpha = math.clamp(tonumber(Config.GradientOpacity) or 1, 0, 1)
     local transparency = NumberSequence.new(1 - alpha)
     for i = #AccentObjects, 1, -1 do
