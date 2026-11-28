@@ -1642,6 +1642,7 @@ local aimbot, lockedTime
 local HomeTab     = CreateTab("Главная", "⌂")
 local FlingTab    = CreateTab("Fling", "💥")
 local CombatTab   = CreateTab("Combat", "🎯")
+local TargetTab    = CreateTab("Target", "◎")
 local RageTab     = CreateTab("Rage", "☠")
 local MoveTab     = CreateTab("Movement", "🏃")
 local VisualsTab  = CreateTab("Visuals", "👁")
@@ -1655,6 +1656,131 @@ local ExecTab     = CreateTab("Executor", "⌨")
 local SettingsTab = CreateTab("Settings", "⚙")
 local ExtrasTab   = CreateTab("Extras", "✨")
 local ConfigTab   = CreateTab("Configs", "💾")
+
+-- ==================== TARGET ====================
+do
+    TargetTab:Section("Выбор игрока")
+    local selectedTarget = nil
+    local targetSearch = ""
+    local targetDropdown = TargetTab:Label("Выбран: никто")
+    local targetButtons = {}
+
+    local function resolveTarget()
+        if selectedTarget and selectedTarget.Parent == Players then
+            return selectedTarget
+        end
+        local q = string.lower((targetSearch or ""):match("^%s*(.-)%s*$") or "")
+        if q == "" then return nil end
+        local exact, partial = nil, nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                local name = string.lower(p.Name)
+                local display = string.lower(p.DisplayName)
+                if name == q or display == q then exact = p break end
+                if not partial and (string.find(name, q, 1, true) or string.find(display, q, 1, true)) then
+                    partial = p
+                end
+            end
+        end
+        return exact or partial
+    end
+
+    local function refreshTargetList()
+        for _, button in ipairs(targetButtons) do
+            pcall(function() button:Destroy() end)
+        end
+        table.clear(targetButtons)
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                local item = TargetTab:Button(p.DisplayName .. "  (@" .. p.Name .. ")", function()
+                    selectedTarget = p
+                    targetSearch = p.Name
+                    targetDropdown.Text = "Выбран: " .. p.DisplayName .. " (@" .. p.Name .. ")"
+                    Notify("Target", "Цель выбрана: " .. p.Name, 2)
+                end, true)
+                table.insert(targetButtons, item)
+            end
+        end
+        if #targetButtons == 0 then
+            targetDropdown.Text = "В сессии нет других игроков"
+        end
+    end
+
+    TargetTab:Input("Часть ника / Display Name", "например, Alex", function(value)
+        targetSearch = value or ""
+        selectedTarget = nil
+        local p = resolveTarget()
+        if p then
+            selectedTarget = p
+            targetDropdown.Text = "Выбран: " .. p.DisplayName .. " (@" .. p.Name .. ")"
+        else
+            targetDropdown.Text = "Совпадение не найдено. Обнови список или уточни поиск."
+        end
+    end)
+
+    TargetTab:Button("Обновить список игроков", refreshTargetList, true)
+    refreshTargetList()
+
+    local infoLabel = TargetTab:Label("Информация о выбранном игроке появится здесь")
+    TargetTab:Button("Показать информацию о цели", function()
+        local p = resolveTarget()
+        if not p then error("Сначала выбери игрока", 0) end
+        local char = p.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not (hum and root) then error("Персонаж игрока пока недоступен", 0) end
+        local distance = 0
+        local myRoot = GetRoot()
+        if myRoot then distance = (myRoot.Position - root.Position).Magnitude end
+        infoLabel.Text = ("@%s | HP: %d/%d | Дистанция: %.1f | Команда: %s"):format(
+            p.Name, math.floor(hum.Health), math.floor(hum.MaxHealth), distance,
+            p.Team and p.Team.Name or "нет"
+        )
+    end, true)
+
+    TargetTab:Section("Навигация")
+    TargetTab:Button("Отметить выбранного игрока", function()
+        local p = resolveTarget()
+        if not p then error("Сначала выбери игрока", 0) end
+        local char = p.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then error("Персонаж игрока пока недоступен", 0) end
+        local old = workspace:FindFirstChild("SiriusTargetMarker")
+        if old then old:Destroy() end
+        local marker = Instance.new("Highlight")
+        marker.Name = "SiriusTargetMarker"
+        marker.Adornee = char
+        marker.FillTransparency = 0.82
+        marker.OutlineTransparency = 0
+        marker.Parent = char
+        task.delay(8, function()
+            if marker and marker.Parent then marker:Destroy() end
+        end)
+        Notify("Target", "Игрок отмечен на 8 секунд", 2)
+    end, true)
+
+    TargetTab:Button("Сбросить выбранную цель", function()
+        selectedTarget = nil
+        targetSearch = ""
+        targetDropdown.Text = "Выбран: никто"
+        infoLabel.Text = "Информация о выбранном игроке появится здесь"
+    end, true)
+
+    local playerAddedConn = Players.PlayerAdded:Connect(refreshTargetList)
+    local playerRemovingConn = Players.PlayerRemoving:Connect(function(p)
+        if selectedTarget == p then
+            selectedTarget = nil
+            targetDropdown.Text = "Цель вышла из игры"
+        end
+        refreshTargetList()
+    end)
+    OnUnload(function()
+        if playerAddedConn then playerAddedConn:Disconnect() end
+        if playerRemovingConn then playerRemovingConn:Disconnect() end
+        local marker = workspace:FindFirstChild("SiriusTargetMarker")
+        if marker then marker:Destroy() end
+    end)
+end
 
 -- ==================== HOME DASHBOARD ====================
 do
@@ -2545,27 +2671,7 @@ CombatTab:Toggle("Показывать урон над головами", false,
 end)
 OnUnload(function() for _, c in ipairs(dmgConns) do pcall(function() c:Disconnect() end) end end)
 
-local pingBot = {on=false, dist=8, conn=nil, timer=0}
-CombatTab:Toggle("Ping Abuse TP (мелкий TP)", false, function(on)
-    if pingBot.conn then pingBot.conn:Disconnect() pingBot.conn = nil end
-    pingBot.on = on
-    if not on then return end
-    pingBot.conn = RunService.Heartbeat:Connect(function(dt)
-        local r = GetRoot()
-        if not r then return end
-        pingBot.timer += dt
-        if pingBot.timer < 0.07 then return end
-        pingBot.timer = 0
-        local d = pingBot.dist
-        local offs = {Vector3.new(d,0,0),Vector3.new(-d,0,0),Vector3.new(0,0,d),Vector3.new(0,0,-d)}
-        local o = offs[math.random(#offs)]
-        local saved = r.Position
-        r.CFrame = CFrame.new(saved + o)
-        task.defer(function() if r and r.Parent then r.CFrame = CFrame.new(saved) end end)
-    end)
-end)
-OnUnload(function() if pingBot.conn then pingBot.conn:Disconnect() end end)
-CombatTab:Slider("Ping Abuse дистанция", 2, 20, 8, function(v) pingBot.dist = v end)
+
 
 end
 -- ==================== RAGE ====================
