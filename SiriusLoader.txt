@@ -3411,8 +3411,8 @@ end)
 OnUnload(StopFly)
 MoveTab:Slider("Скорость полёта", 10, 300, 60, function(v) flySpeed = v end)
 
--- Дополнительные режимы полёта.
--- Общий контроллер исключает одновременную работу нескольких fly-режимов.
+MoveTab:Section("Дополнительные режимы полёта")
+-- Общий контроллер исключает одновременную работу нескольких дополнительных режимов.
 local extraFlyMode, extraFlyConn = nil, nil
 local extraFlySpeed = 60
 local function StopExtraFly()
@@ -3473,41 +3473,63 @@ MoveTab:Slider("Скорость дополнительных полётов", 1
 end)
 OnUnload(StopExtraFly)
 
--- Отдельный CFrame Fly, не использует BodyVelocity/BodyGyro.
+-- CFrame Fly: горизонтальные направления выравниваются по плоскости земли,
+-- вертикальное движение управляется только Space/Shift. Гравитация гасится.
 local cframeFlySpeed, cframeFlyConn = 60, nil
+local cframeOldAutoRotate = nil
 local function StopCFrameFly()
     if cframeFlyConn then
         cframeFlyConn:Disconnect()
         cframeFlyConn = nil
     end
+    local humanoid, root = GetHum(), GetRoot()
+    if humanoid and cframeOldAutoRotate ~= nil then
+        humanoid.AutoRotate = cframeOldAutoRotate
+    end
+    cframeOldAutoRotate = nil
+    if root then root.AssemblyLinearVelocity = Vector3.zero end
 end
 
 MoveTab:Toggle("CFrame Fly (WASD + Space / Shift)", false, function(on)
     StopCFrameFly()
     if not on then return end
 
+    local humanoid = GetHum()
+    if humanoid then
+        cframeOldAutoRotate = humanoid.AutoRotate
+        humanoid.AutoRotate = false
+    end
+
     cframeFlyConn = RunService.RenderStepped:Connect(function(dt)
-        local humanoid, root = GetHum(), GetRoot()
+        local h, root = GetHum(), GetRoot()
         local camera = workspace.CurrentCamera
-        if not (humanoid and root and camera) then return end
+        if not (h and root and camera) then return end
+
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+        if look.Magnitude > 0 then look = look.Unit end
+        if right.Magnitude > 0 then right = right.Unit end
 
         local direction = Vector3.zero
         if UIS.TouchEnabled and not UIS.KeyboardEnabled then
-            direction = humanoid.MoveDirection
-            if humanoid.Jump then direction += Vector3.yAxis end
+            local md = h.MoveDirection
+            direction = Vector3.new(md.X, 0, md.Z)
+            if h.Jump then direction += Vector3.yAxis end
         else
-            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction += look end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= look end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then direction += right end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= right end
             if UIS:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
             if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then direction -= Vector3.yAxis end
         end
 
-        if direction.Magnitude > 0 then
-            local step = direction.Unit * cframeFlySpeed * math.min(dt, 0.05)
-            root.CFrame = root.CFrame + step
+        local step = Vector3.zero
+        if direction.Magnitude > 0.001 then
+            step = direction.Unit * cframeFlySpeed * math.clamp(dt, 0, 0.05)
         end
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.CFrame = root.CFrame + step
     end)
 end)
 OnUnload(StopCFrameFly)
