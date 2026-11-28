@@ -9999,7 +9999,9 @@ do
             checkForUpdates(false)
         end
     end)
-end- Восстанавливаем состояния переключателей после автообновления.
+end
+
+-- Восстанавливаем состояния переключателей после автообновления.
 pcall(function()
     if isfile and readfile and isfile("SiriusLoader_PendingRestore.json") then
         local pending = HttpService:JSONDecode(readfile("SiriusLoader_PendingRestore.json"))
