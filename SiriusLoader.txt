@@ -9959,43 +9959,53 @@ do
     local updateBusy, updateDialogOpen = false, false
 
     local function getLatestCommit()
-        local raw
         local req = (syn and syn.request) or (http and http.request) or http_request or request
-        if type(req) == "function" then
-            local ok, response = pcall(req, {
-                Url = UPDATE_API .. "&_=" .. tostring(os.clock()),
-                Method = "GET",
-                Headers = {
-                    ["Accept"] = "application/vnd.github+json",
-                    ["Cache-Control"] = "no-cache, no-store",
-                    ["Pragma"] = "no-cache",
-                    ["User-Agent"] = "SiriusLoader",
-                },
-            })
-            if ok and type(response) == "table" then
-                local status = tonumber(response.StatusCode or response.Status)
-                if status and status ~= 200 then
-                    warn("[Sirius Update] GitHub API HTTP status: " .. tostring(status))
-                    return nil
+        local function httpGet(url, accept)
+            if type(req) == "function" then
+                local ok, response = pcall(req, {
+                    Url = url, Method = "GET",
+                    Headers = {
+                        ["Accept"] = accept or "application/vnd.github+json",
+                        ["Cache-Control"] = "no-cache, no-store",
+                        ["Pragma"] = "no-cache",
+                        ["User-Agent"] = "SiriusLoader",
+                    },
+                })
+                if ok and type(response) == "table" then
+                    return tonumber(response.StatusCode or response.Status), response.Body
                 end
-                if type(response.Body) == "string" then raw = response.Body end
-            elseif not ok then
-                warn("[Sirius Update] request failed: " .. tostring(response))
+                if not ok then warn("[Sirius Update] HTTP request failed: " .. tostring(response)) end
             end
+            local ok, body = pcall(FetchSource, url)
+            if ok and type(body) == "string" then return 200, body end
+            return nil, nil
         end
-        if not raw then raw = FetchSource(UPDATE_API .. "&_=" .. tostring(os.clock())) end
-        if type(raw) ~= "string" or #raw == 0 then return nil end
-        local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
-        if not ok then
-            warn("[Sirius Update] API response is not valid JSON: " .. raw:sub(1, 180))
-            return nil
+
+        -- Основной источник: REST API. При 403 пробуем Atom feed,
+        -- который не расходует лимит REST API.
+        local status, raw = httpGet(UPDATE_API .. "&_=" .. tostring(os.clock()))
+        if status == 200 and type(raw) == "string" then
+            local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+            if ok and type(data) == "table" and type(data[1]) == "table"
+                and type(data[1].sha) == "string" then
+                return data[1].sha
+            end
+            warn("[Sirius Update] REST API returned unexpected JSON; trying Atom feed.")
+        elseif status then
+            warn("[Sirius Update] REST API HTTP " .. tostring(status) .. "; trying Atom feed.")
         end
-        if type(data) ~= "table" or type(data[1]) ~= "table"
-            or type(data[1].sha) ~= "string" then
-            warn("[Sirius Update] Unexpected GitHub API response: " .. raw:sub(1, 180))
-            return nil
+
+        local atomUrl = "https://github.com/sirius551/SiriusLoader/commits/main/SiriusLoader.txt.atom?nocache=" .. tostring(os.clock())
+        local atomStatus, atom = httpGet(atomUrl, "application/atom+xml")
+        if atomStatus == 200 and type(atom) == "string" then
+            local sha = atom:match("Grit::Commit/([%da-fA-F]+)")
+                or atom:match("<id>.-/([%da-fA-F]+)</id>")
+            if sha and #sha >= 7 then return sha end
+            warn("[Sirius Update] Atom feed did not contain a commit SHA: " .. atom:sub(1, 160))
+        elseif atomStatus then
+            warn("[Sirius Update] Atom feed HTTP " .. tostring(atomStatus))
         end
-        return data[1].sha
+        return nil
     end
 
     local function readUpdateState()
