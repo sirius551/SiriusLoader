@@ -9189,7 +9189,7 @@ end
 -- ==================== SETTINGS ====================
 do
 SettingsTab:Section("Обновления")
-SettingsTab:Button("↻  Проверить обновления GitHub", function()
+SettingsTab:Button("Проверить обновления GitHub", function()
     local env = (getgenv and getgenv()) or _G
     local checker = env and env.SiriusCheckUpdates
     if type(checker) == "function" then
@@ -9835,19 +9835,20 @@ end
 
 -- ==================== АВТООБНОВЛЕНИЕ SIRIUSLOADER ====================
 do
-    local UPDATE_API = "https://api.github.com/repos/sirius551/SiriusLoader/commits/main"
+       -- Сверяем только историю SiriusLoader.txt, а не любые коммиты репозитория.
+    local UPDATE_API = "https://api.github.com/repos/sirius551/SiriusLoader/commits?path=SiriusLoader.txt&per_page=1"
     local UPDATE_RAW = "https://raw.githubusercontent.com/sirius551/SiriusLoader/main/SiriusLoader.txt"
     local UPDATE_STATE_FILE = "SiriusLoader_UpdateState.json"
     local UPDATE_PENDING_FILE = "SiriusLoader_PendingRestore.json"
     local updateBusy, updateDialogOpen = false, false
-    local latestCommit = nil
 
     local function getLatestCommit()
-        local raw = FetchSource(UPDATE_API)
+        local raw = FetchSource(UPDATE_API .. "&_=" .. tostring(os.time()))
         if not raw then return nil end
         local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
-        if not ok or type(data) ~= "table" or type(data.sha) ~= "string" then return nil end
-        return data.sha
+        if not ok or type(data) ~= "table" or type(data[1]) ~= "table"
+            or type(data[1].sha) ~= "string" then return nil end
+        return data[1].sha
     end
 
     local function readUpdateState()
@@ -9915,9 +9916,7 @@ do
         }, card)
         Round(yes, 8)
         yes.MouseButton1Click:Connect(function() finish(true) end)
-        task.delay(90, function()
-            if overlay.Parent then finish(false) end
-        end)
+        task.delay(90, function() if overlay.Parent then finish(false) end end)
         decided.Event:Wait()
         pcall(function() overlay:Destroy() end)
         pcall(function() decided:Destroy() end)
@@ -9925,10 +9924,9 @@ do
 
         if not choice then
             saveUpdateState(sha)
-            Notify("Sirius Update", "Проверка отложена до следующего нового коммита.", 3, true)
+            Notify("Sirius Update", "Проверка отложена до следующего обновления файла.", 3, true)
             return
         end
-
         if type(writefile) ~= "function" or type(readfile) ~= "function" or type(loadstring) ~= "function" then
             Notify("Обновление", "Executor не поддерживает сохранение состояния или loadstring.", 5, true)
             return
@@ -9941,7 +9939,6 @@ do
             Notify("Обновление", "Не удалось скачать новую версию с GitHub.", 5, true)
             return
         end
-
         local snapshot = SnapshotState()
         local saved = pcall(function()
             writefile(UPDATE_PENDING_FILE, HttpService:JSONEncode(snapshot))
@@ -9952,7 +9949,6 @@ do
             Notify("Обновление", "Не удалось сохранить включённые функции.", 5, true)
             return
         end
-
         local compiled, compileError = loadstring(source)
         if type(compiled) ~= "function" then
             updateBusy = false
@@ -9960,15 +9956,12 @@ do
             Notify("Обновление", "Ошибка компиляции новой версии: " .. tostring(compileError), 5, true)
             return
         end
-
         Notify("Sirius Update", "Сохраняю настройки и перезапускаю скрипт...", 2, true)
         task.wait(0.25)
         UnloadHub()
         task.wait(0.15)
         local ok, err = pcall(compiled)
-        if not ok then
-            warn("[SiriusLoader Update] " .. tostring(err))
-        end
+        if not ok then warn("[SiriusLoader Update] " .. tostring(err)) end
     end
 
     local function checkForUpdates(manual)
@@ -9979,18 +9972,17 @@ do
         if manual then Notify("Sirius Update", "Проверяю GitHub...", 2, true) end
         local sha = getLatestCommit()
         if not sha then
-            if manual then Notify("Sirius Update", "GitHub недоступен или executor заблокировал HTTP-запрос.", 4, true) end
+            if manual then Notify("Sirius Update", "GitHub недоступен или ответ API не распознан.", 4, true) end
             return
         end
-        latestCommit = sha
         local state = readUpdateState()
         if type(state.lastSeenCommit) ~= "string" then
             saveUpdateState(sha)
-            if manual then Notify("Sirius Update", "Не найден сохранённый номер версии. Текущий коммит записан.", 4, true) end
+            if manual then Notify("Sirius Update", "Версия записана. Следующие изменения будут обнаруживаться автоматически.", 4, true) end
             return
         end
         if state.lastSeenCommit ~= sha then
-            if manual then Notify("Sirius Update", "Найдена новая версия!", 2, true) end
+            if manual then Notify("Sirius Update", "Найдено обновление файла SiriusLoader.txt.", 2, true) end
             showUpdateDialog(sha)
         elseif manual then
             Notify("Sirius Update", "У тебя установлена последняя версия.", 3, true)
@@ -9998,25 +9990,16 @@ do
     end
 
     if getgenv then getgenv().SiriusCheckUpdates = function() checkForUpdates(true) end end
-
     task.spawn(function()
+        task.wait(3)
         checkForUpdates(false)
         while ScreenGui.Parent do
             task.wait(120)
             if not ScreenGui.Parent then break end
-            local sha = getLatestCommit()
-            if sha then
-                if not latestCommit then latestCommit = sha end
-                if sha ~= latestCommit then
-                    latestCommit = sha
-                    showUpdateDialog(sha)
-                end
-            end
+            checkForUpdates(false)
         end
     end)
-end
-
--- Восстанавливаем состояния переключателей после автообновления.
+end- Восстанавливаем состояния переключателей после автообновления.
 pcall(function()
     if isfile and readfile and isfile("SiriusLoader_PendingRestore.json") then
         local pending = HttpService:JSONDecode(readfile("SiriusLoader_PendingRestore.json"))
