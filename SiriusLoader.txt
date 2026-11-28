@@ -1847,7 +1847,7 @@ end -- do ConfigTab
 -- ==================== EXTRAS: 20 ДОПОЛНИТЕЛЬНЫХ ФУНКЦИЙ ====================
 do
 ExtrasTab:Section("Быстрые действия")
-local function CopyValue(label, value)
+function CopyValue(label, value)
     local payload = tostring(value)
     local writers = {}
     for _, writer in pairs({
@@ -3285,7 +3285,7 @@ local origGravity = workspace.Gravity
 local gravitySliderValue = math.floor(origGravity)
 local zeroGravityEnabled, x4GravityEnabled = false, false
 
-local function ApplyGravity()
+function ApplyGravity()
     if zeroGravityEnabled then
         workspace.Gravity = 0
     elseif x4GravityEnabled then
@@ -5392,7 +5392,8 @@ MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed,
 end, 2)
  
 -- Визуальная палитра для двух точек градиента. HEX-поля остаются как точный ввод.
-local function openGradientPalette()
+local gradientPaletteButton
+local function openGradientPalette(anchorButton)
     if ScreenGui:FindFirstChild("SiriusGradientPaletteOverlay") then return end
     local selected = "A"
     local startColor = colorFromRGB(gradientA)
@@ -5404,19 +5405,26 @@ local function openGradientPalette()
 
     local overlay = New("TextButton", {
         Name = "SiriusGradientPaletteOverlay", Text = "", AutoButtonColor = false,
-        BackgroundColor3 = Color3.fromRGB(5, 8, 14), BackgroundTransparency = 0.28,
-        Size = UDim2.new(1, 0, 1, 0), ZIndex = 800, Modal = true,
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), ZIndex = 800, Modal = true,
     }, ScreenGui)
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    local anchorPos = anchorButton and anchorButton.AbsolutePosition or Vector2.new(18, 18)
+    local anchorSize = anchorButton and anchorButton.AbsoluteSize or Vector2.new(0, 0)
+    local popupWidth, popupHeight = 390, 410
+    local popupX = math.clamp(anchorPos.X, 8, math.max(8, viewport.X - popupWidth - 8))
+    local popupY = anchorPos.Y + anchorSize.Y + 8
+    if popupY + popupHeight > viewport.Y - 8 then popupY = anchorPos.Y - popupHeight - 8 end
+    popupY = math.clamp(popupY, 8, math.max(8, viewport.Y - popupHeight - 8))
     local card = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 18),
-        Size = UDim2.new(0, 390, 0, 390), BackgroundColor3 = Theme.Top,
+        AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(popupX, popupY),
+        Size = UDim2.new(0, popupWidth, 0, popupHeight), BackgroundColor3 = Theme.Top,
         BorderSizePixel = 0, ZIndex = 801,
     }, overlay)
     Round(card, 16)
     New("UIStroke", {Color = Theme.Accent, Transparency = 0.35, Thickness = 1.4}, card)
     local scale = New("UIScale", {Scale = 0.94}, card)
-    Tween(overlay, 0.18, {BackgroundTransparency = 0.48})
-    Tween(card, 0.24, {Position = UDim2.new(0.5, 0, 0.5, 0)}, Enum.EasingStyle.Back)
+    Tween(card, 0.24, {Position = UDim2.fromOffset(popupX, popupY)}, Enum.EasingStyle.Back)
     Tween(scale, 0.24, {Scale = 1}, Enum.EasingStyle.Back)
 
     local function label(parent, text, pos, size, color, textSize, bold)
@@ -5576,10 +5584,9 @@ local function openGradientPalette()
         closing=true
         moveConn:Disconnect()
         endConn:Disconnect()
-        Tween(card,0.16,{Position=UDim2.new(0.5,0,0.5,14)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
-        Tween(scale,0.16,{Scale=0.94},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
-        local fade=Tween(overlay,0.16,{BackgroundTransparency=1})
-        fade.Completed:Wait()
+        Tween(card,0.16,{Position=UDim2.fromOffset(popupX, popupY + 10)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
+        local shrink = Tween(scale,0.16,{Scale=0.94},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
+        shrink.Completed:Wait()
         if overlay.Parent then overlay:Destroy() end
     end
     tabA.MouseButton1Click:Connect(function() selectEndpoint("A") end)
@@ -5597,7 +5604,7 @@ local function openGradientPalette()
     end)
     refreshPreview()
 end
-MiscTab:Button("🎨 Открыть палитру цветов", openGradientPalette)
+gradientPaletteButton = MiscTab:Button("🎨 Открыть палитру цветов", function() openGradientPalette(gradientPaletteButton) end)
 
 local gradientConn
 refreshAccentMode = function()
@@ -5619,11 +5626,15 @@ gradientConn = RunService.Heartbeat:Connect(function(dt)
 end)
 OnUnload(function() if gradientConn then gradientConn:Disconnect() end end)
 MiscTab:Button("Случайный цвет интерфейса", function()
-    local color = Color3.fromHSV(math.random(), 0.7, 1)
+    -- Полностью случайный RGB/HEX, включая тёмные и нейтральные оттенки.
+    local r, g, b = math.random(0, 255), math.random(0, 255), math.random(0, 255)
+    local color = Color3.fromRGB(r, g, b)
+    local hex = string.format("#%02X%02X%02X", r, g, b)
     accentMode = "solid"
     Config.AccentMode = "solid"
     refreshAccentMode()
     ApplyAccent(color, true)
+    Notify("Случайный HEX", hex, 3, true)
 end)
 MiscTab:Label("Инструменты этой вкладки работают локально и не меняют состояние других игроков.")
 
