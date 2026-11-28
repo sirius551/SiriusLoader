@@ -5344,298 +5344,6 @@ local function applyAccentDirect(color)
     for _, tab in pairs(Tabs) do tab.Page.ScrollBarImageColor3 = color end
     for _, toggle in ipairs(Toggles) do toggle.Render() end
 end
-MiscTab:Section("Кастомизация оформления")
-local function accentModeLabel(mode)
-    local labels = {
-        solid = "Однотонный",
-        rainbow = "Радужный",
-        gradient = "Градиент",
-    }
-    return labels[mode] or "Однотонный"
-end
-if accentMode ~= "solid" and accentMode ~= "rainbow" and accentMode ~= "gradient" then
-    accentMode = "solid"
-end
-local accentModeButton
-accentModeButton = MiscTab:Button("Режим акцента: " .. accentModeLabel(accentMode), function()
-    local modes = {"solid", "rainbow", "gradient"}
-    local index = table.find(modes, accentMode) or 1
-    accentMode = modes[index % #modes + 1]
-    Config.AccentMode = accentMode
-    if accentModeButton and accentModeButton.Parent then
-        accentModeButton.Text = "Режим акцента: " .. accentModeLabel(accentMode)
-    end
-    refreshAccentMode()
-    SaveConfig()
-    Notify("Оформление", "Режим: " .. accentModeLabel(accentMode), 2)
-end)
-local gradABox = MiscTab:Input("Первый цвет градиента (#RRGGBB)", "#000000", function(t)
-    local c = parseHexColor(t)
-    if c then
-        gradientA = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
-        Config.GradientA = gradientA
-        if accentMode == "gradient" then refreshAccentMode() end
-        SaveConfig()
-    end
-end)
-local gradBBox = MiscTab:Input("Второй цвет градиента (#RRGGBB)", "#FFFFFF", function(t)
-    local c = parseHexColor(t)
-    if c then
-        gradientB = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
-        Config.GradientB = gradientB
-        if accentMode == "gradient" then refreshAccentMode() end
-        SaveConfig()
-    end
-end)
-MiscTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed, function(v)
-    gradientSpeed = v Config.GradientSpeed = v SaveConfig()
-end, 2)
- 
--- Визуальная палитра для двух точек градиента. HEX-поля остаются как точный ввод.
-local gradientPaletteButton
-local function openGradientPalette(anchorButton)
-    if ScreenGui:FindFirstChild("SiriusGradientPaletteOverlay") then return end
-    local selected = "A"
-    local startColor = colorFromRGB(gradientA)
-    local draftColor = startColor
-    local h, sat, val = draftColor:ToHSV()
-    local opacity = math.clamp(tonumber(Config.GradientOpacity) or 1, 0, 1)
-    local dragging = nil
-    local closing = false
-
-    local overlay = New("TextButton", {
-        Name = "SiriusGradientPaletteOverlay", Text = "", AutoButtonColor = false,
-        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), ZIndex = 800, Modal = true,
-    }, ScreenGui)
-    local camera = workspace.CurrentCamera
-    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
-    local anchorPos = anchorButton and anchorButton.AbsolutePosition or Vector2.new(18, 18)
-    local anchorSize = anchorButton and anchorButton.AbsoluteSize or Vector2.new(0, 0)
-    local popupWidth, popupHeight = 390, 410
-    local popupX = math.clamp(anchorPos.X, 8, math.max(8, viewport.X - popupWidth - 8))
-    local popupY = anchorPos.Y + anchorSize.Y + 8
-    if popupY + popupHeight > viewport.Y - 8 then popupY = anchorPos.Y - popupHeight - 8 end
-    popupY = math.clamp(popupY, 8, math.max(8, viewport.Y - popupHeight - 8))
-    local card = New("Frame", {
-        AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(popupX, popupY),
-        Size = UDim2.new(0, popupWidth, 0, popupHeight), BackgroundColor3 = Theme.Top,
-        BorderSizePixel = 0, ZIndex = 801,
-    }, overlay)
-    Round(card, 16)
-    New("UIStroke", {Color = Theme.Accent, Transparency = 0.35, Thickness = 1.4}, card)
-    local scale = New("UIScale", {Scale = 0.94}, card)
-    Tween(card, 0.24, {Position = UDim2.fromOffset(popupX, popupY)}, Enum.EasingStyle.Back)
-    Tween(scale, 0.24, {Scale = 1}, Enum.EasingStyle.Back)
-
-    local function label(parent, text, pos, size, color, textSize, bold)
-        return New("TextLabel", {BackgroundTransparency=1, Position=pos, Size=size,
-            Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham, Text=text,
-            TextColor3=color or Theme.Text, TextSize=textSize or 12,
-            TextXAlignment=Enum.TextXAlignment.Left, ZIndex=803}, parent)
-    end
-    label(card, "ЦВЕТОВАЯ ПАЛИТРА", UDim2.new(0,18,0,13), UDim2.new(1,-70,0,22), Theme.Text, 15, true)
-    local close = New("TextButton", {Text="×", Font=Enum.Font.GothamBold, TextSize=20,
-        TextColor3=Theme.SubText, BackgroundColor3=Theme.Element, BorderSizePixel=0,
-        Position=UDim2.new(1,-42,0,10), Size=UDim2.new(0,30,0,30), ZIndex=804}, card)
-    Round(close, 9)
-
-    local tabA = New("TextButton", {Text="ЦВЕТ 1", Font=Enum.Font.GothamBold, TextSize=11,
-        TextColor3=Theme.Text, BackgroundColor3=Theme.Accent, BorderSizePixel=0,
-        Position=UDim2.new(0,18,0,48), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
-    Round(tabA, 8)
-    local tabB = New("TextButton", {Text="ЦВЕТ 2", Font=Enum.Font.GothamBold, TextSize=11,
-        TextColor3=Theme.Text, BackgroundColor3=Theme.Element, BorderSizePixel=0,
-        Position=UDim2.new(0,126,0,48), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
-    Round(tabB, 8)
-
-    local sv = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=Color3.new(1,1,1),
-        Position=UDim2.new(0,18,0,91), Size=UDim2.new(0,270,0,154), ZIndex=802}, card)
-    Round(sv, 9)
-    local white = New("Frame", {BackgroundColor3=Color3.new(1,1,1), BorderSizePixel=0,
-        Size=UDim2.new(1,0,1,0), ZIndex=803}, sv)
-    Round(white, 9)
-    New("UIGradient", {Color=ColorSequence.new(Color3.new(1,1,1),Color3.new(1,1,1)),
-        Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)}),
-        Rotation=0}, white)
-    local hueLayer = New("Frame", {BackgroundColor3=Color3.new(1,0,0), BorderSizePixel=0,
-        Size=UDim2.new(1,0,1,0), ZIndex=804}, sv)
-    Round(hueLayer, 9)
-    New("UIGradient", {Color=ColorSequence.new({
-        ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),
-        ColorSequenceKeypoint.new(1,Color3.new(1,1,1))}), Transparency=NumberSequence.new(1)}, hueLayer)
-    local colorLayer = New("Frame", {BackgroundColor3=Color3.new(1,0,0), BackgroundTransparency=0,
-        BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=805}, sv)
-    Round(colorLayer, 9)
-    New("UIGradient", {Color=ColorSequence.new(Color3.new(1,1,1),Color3.new(1,1,1)),
-        Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)}),
-        Rotation=0}, colorLayer)
-    local darkLayer = New("Frame", {BackgroundColor3=Color3.new(0,0,0), BackgroundTransparency=0,
-        BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=806}, sv)
-    Round(darkLayer, 9)
-    New("UIGradient", {Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(1,0)}),
-        Rotation=90}, darkLayer)
-    local selector = New("Frame", {BackgroundTransparency=1, BorderSizePixel=0,
-        Size=UDim2.new(0,12,0,12), AnchorPoint=Vector2.new(0.5,0.5), ZIndex=808}, sv)
-    New("UICorner", {CornerRadius=UDim.new(1,0)}, selector)
-    New("UIStroke", {Color=Color3.new(1,1,1), Thickness=2}, selector)
-
-    local hueBar = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=Color3.new(1,1,1),
-        Position=UDim2.new(0,300,0,91), Size=UDim2.new(0,22,0,154), ZIndex=802}, card)
-    Round(hueBar, 8)
-    New("UIGradient", {Rotation=90, Color=ColorSequence.new({
-        ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),
-        ColorSequenceKeypoint.new(0.17,Color3.fromRGB(255,255,0)),
-        ColorSequenceKeypoint.new(0.33,Color3.fromRGB(0,255,0)),
-        ColorSequenceKeypoint.new(0.5,Color3.fromRGB(0,255,255)),
-        ColorSequenceKeypoint.new(0.67,Color3.fromRGB(0,0,255)),
-        ColorSequenceKeypoint.new(0.83,Color3.fromRGB(255,0,255)),
-        ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0)),
-    })}, hueBar)
-    local hueMark = New("Frame", {BackgroundColor3=Color3.new(1,1,1), BorderSizePixel=0,
-        Size=UDim2.new(1,0,0,4), ZIndex=809}, hueBar)
-    New("UIStroke", {Color=Color3.fromRGB(25,25,30), Thickness=1}, hueMark)
-
-    label(card, "ПРОШЛЫЙ", UDim2.new(0,18,0,257), UDim2.new(0,100,0,16), Theme.SubText, 9, true)
-    label(card, "НОВЫЙ", UDim2.new(0,132,0,257), UDim2.new(0,100,0,16), Theme.SubText, 9, true)
-    local oldSwatch = New("Frame", {BackgroundColor3=startColor, BorderSizePixel=0,
-        Position=UDim2.new(0,18,0,276), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
-    Round(oldSwatch, 7)
-    local newSwatch = New("Frame", {BackgroundColor3=draftColor, BorderSizePixel=0,
-        Position=UDim2.new(0,132,0,276), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
-    Round(newSwatch, 7)
-    local hexLabel = label(card, "#FFFFFF", UDim2.new(0,245,0,280), UDim2.new(0,125,0,22), Theme.Text, 12, true)
-
-    label(card, "ПРОЗРАЧНОСТЬ", UDim2.new(0,18,0,316), UDim2.new(0,130,0,16), Theme.SubText, 9, true)
-    local alphaBar = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=draftColor,
-        Position=UDim2.new(0,18,0,337), Size=UDim2.new(0,240,0,10), ZIndex=803}, card)
-    Round(alphaBar, 5)
-    New("UIGradient", {Transparency=NumberSequence.new({
-        NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)})}, alphaBar)
-    local alphaFill = New("Frame", {BackgroundColor3=Theme.Accent, BorderSizePixel=0,
-        Size=UDim2.new(opacity,0,1,0), ZIndex=804}, alphaBar)
-    Round(alphaFill, 5)
-    local alphaValue = label(card, tostring(math.floor(opacity*100+0.5)).."%", UDim2.new(0,270,0,331), UDim2.new(0,60,0,20), Theme.Text, 11, true)
-
-    local apply = New("TextButton", {Text="Применить", Font=Enum.Font.GothamBold, TextSize=12,
-        TextColor3=Color3.new(1,1,1), BackgroundColor3=Theme.Accent, BorderSizePixel=0,
-        Position=UDim2.new(1,-126,1,-48), Size=UDim2.new(0,108,0,32), ZIndex=804}, card)
-    Round(apply, 9)
-    local cancel = New("TextButton", {Text="Отмена", Font=Enum.Font.Gotham, TextSize=11,
-        TextColor3=Theme.SubText, BackgroundColor3=Theme.Element, BorderSizePixel=0,
-        Position=UDim2.new(0,18,1,-48), Size=UDim2.new(0,90,0,32), ZIndex=804}, card)
-    Round(cancel, 9)
-
-    local function refreshPreview()
-        draftColor = Color3.fromHSV(h, sat, val)
-        colorLayer.BackgroundColor3 = Color3.fromHSV(h,1,1)
-        selector.Position = UDim2.new(sat,0,1-val,0)
-        hueMark.Position = UDim2.new(0,0,h, -2)
-        newSwatch.BackgroundColor3 = draftColor
-        hexLabel.Text = string.format("#%02X%02X%02X", math.floor(draftColor.R*255+0.5),
-            math.floor(draftColor.G*255+0.5), math.floor(draftColor.B*255+0.5))
-        alphaBar.BackgroundColor3 = draftColor
-        alphaFill.Size = UDim2.new(opacity,0,1,0)
-        alphaValue.Text = tostring(math.floor(opacity*100+0.5)).."%"
-    end
-    local function selectEndpoint(which)
-        selected = which
-        startColor = colorFromRGB(which == "A" and gradientA or gradientB)
-        draftColor = startColor
-        h,sat,val = draftColor:ToHSV()
-        oldSwatch.BackgroundColor3 = startColor
-        tabA.BackgroundColor3 = which == "A" and Theme.Accent or Theme.Element
-        tabB.BackgroundColor3 = which == "B" and Theme.Accent or Theme.Element
-        refreshPreview()
-    end
-    local function setSV(input)
-        local p = math.clamp((input.Position.X-sv.AbsolutePosition.X)/sv.AbsoluteSize.X,0,1)
-        local q = math.clamp((input.Position.Y-sv.AbsolutePosition.Y)/sv.AbsoluteSize.Y,0,1)
-        sat, val = p, 1-q
-        refreshPreview()
-    end
-    local function setHue(input)
-        h = math.clamp((input.Position.Y-hueBar.AbsolutePosition.Y)/hueBar.AbsoluteSize.Y,0,1)
-        refreshPreview()
-    end
-    local function setOpacity(input)
-        opacity = math.clamp((input.Position.X-alphaBar.AbsolutePosition.X)/alphaBar.AbsoluteSize.X,0,1)
-        refreshPreview()
-    end
-    sv.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="sv" setSV(input) end
-    end)
-    hueBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="hue" setHue(input) end
-    end)
-    alphaBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="alpha" setOpacity(input) end
-    end)
-    local moveConn = UIS.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging=="sv" then setSV(input) elseif dragging=="hue" then setHue(input) elseif dragging=="alpha" then setOpacity(input) end
-        end
-    end)
-    local endConn = UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging=nil end
-    end)
-    local function closePicker()
-        if closing then return end
-        closing=true
-        moveConn:Disconnect()
-        endConn:Disconnect()
-        Tween(card,0.16,{Position=UDim2.fromOffset(popupX, popupY + 10)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
-        local shrink = Tween(scale,0.16,{Scale=0.94},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
-        shrink.Completed:Wait()
-        if overlay.Parent then overlay:Destroy() end
-    end
-    tabA.MouseButton1Click:Connect(function() selectEndpoint("A") end)
-    tabB.MouseButton1Click:Connect(function() selectEndpoint("B") end)
-    close.MouseButton1Click:Connect(closePicker)
-    cancel.MouseButton1Click:Connect(closePicker)
-    overlay.MouseButton1Click:Connect(closePicker)
-    apply.MouseButton1Click:Connect(function()
-        local target = {math.floor(draftColor.R*255+0.5),math.floor(draftColor.G*255+0.5),math.floor(draftColor.B*255+0.5)}
-        if selected=="A" then gradientA=target Config.GradientA=target else gradientB=target Config.GradientB=target end
-        Config.GradientOpacity=opacity
-        if accentMode=="gradient" then refreshAccentMode() end
-        SaveConfig()
-        closePicker()
-    end)
-    refreshPreview()
-end
-gradientPaletteButton = MiscTab:Button("🎨 Открыть палитру цветов", function() openGradientPalette(gradientPaletteButton) end)
-
-local gradientConn
-refreshAccentMode = function()
-    if accentMode == "solid" then
-        updateAccentGradients(nil, nil, true)
-        return
-    end
-    if accentMode == "gradient" then
-        updateAccentGradients(colorFromRGB(gradientA), colorFromRGB(gradientB), false)
-    end
-end
-refreshAccentMode()
-gradientConn = RunService.Heartbeat:Connect(function(dt)
-    if accentMode == "rainbow" then
-        gradientClock += dt * gradientSpeed
-        local hue = (gradientClock * 0.12) % 1
-        updateAccentGradients(Color3.fromHSV(hue, 0.85, 1), Color3.fromHSV((hue + 0.22) % 1, 0.85, 1), false)
-    end
-end)
-OnUnload(function() if gradientConn then gradientConn:Disconnect() end end)
-MiscTab:Button("Случайный цвет интерфейса", function()
-    -- Полностью случайный RGB/HEX, включая тёмные и нейтральные оттенки.
-    local r, g, b = math.random(0, 255), math.random(0, 255), math.random(0, 255)
-    local color = Color3.fromRGB(r, g, b)
-    local hex = string.format("#%02X%02X%02X", r, g, b)
-    accentMode = "solid"
-    Config.AccentMode = "solid"
-    refreshAccentMode()
-    ApplyAccent(color, true)
-    Notify("Случайный HEX", hex, 3, true)
-end)
 MiscTab:Label("Инструменты этой вкладки работают локально и не меняют состояние других игроков.")
 
 end
@@ -9223,7 +8931,41 @@ SettingsTab:Button("Проверить обновления GitHub", function()
         Notify("Sirius Update", "Проверка ещё инициализируется. Попробуй через несколько секунд.", 3, true)
     end
 end, true)
-SettingsTab:Label("Автопроверка: при запуске и каждые 2 минуты.")
+SettingsTab:Label("Интервал автоматической проверки обновлений")
+local updateIntervals = {
+    {label = "Никогда", seconds = 0},
+    {label = "1 минута", seconds = 60},
+    {label = "2 минуты", seconds = 120},
+    {label = "5 минут", seconds = 300},
+    {label = "10 минут", seconds = 600},
+    {label = "15 минут", seconds = 900},
+    {label = "30 минут", seconds = 1800},
+    {label = "1 час", seconds = 3600},
+}
+local updateEnv = (getgenv and getgenv()) or _G
+local configuredInterval = math.clamp(tonumber(Config.AutoUpdateInterval) or 120, 0, 3600)
+local selectedIntervalIndex = 2
+for i, option in ipairs(updateIntervals) do
+    if option.seconds == configuredInterval then selectedIntervalIndex = i break end
+end
+updateEnv.SiriusUpdateInterval = updateIntervals[selectedIntervalIndex].seconds
+local updateIntervalButton
+local function updateIntervalLabel()
+    local option = updateIntervals[selectedIntervalIndex]
+    if updateIntervalButton and updateIntervalButton.Parent then
+        updateIntervalButton.Text = "Интервал: " .. option.label
+    end
+end
+updateIntervalButton = SettingsTab:Button("Интервал: " .. updateIntervals[selectedIntervalIndex].label, function()
+    selectedIntervalIndex = selectedIntervalIndex % #updateIntervals + 1
+    local option = updateIntervals[selectedIntervalIndex]
+    updateEnv.SiriusUpdateInterval = option.seconds
+    Config.AutoUpdateInterval = option.seconds
+    SaveConfig()
+    updateIntervalLabel()
+    Notify("Автообновление", option.seconds == 0 and "Автоматические проверки отключены" or "Интервал: " .. option.label, 2, true)
+end, true)
+
 
 SettingsTab:Section("Светлая / тёмная тема")
 SettingsTab:Toggle("☀ Светлая тема", false, function(on)
@@ -9255,6 +8997,300 @@ local sR = SettingsTab:Slider("Красный (R)", 0, 255, rgb[1], function(v) 
 local sG = SettingsTab:Slider("Зелёный (G)", 0, 255, rgb[2], function(v) rgb[2] = v applyRGB() end)
 local sB = SettingsTab:Slider("Синий (B)", 0, 255, rgb[3], function(v) rgb[3] = v applyRGB() end)
 sR.OnRelease, sG.OnRelease, sB.OnRelease = SaveConfig, SaveConfig, SaveConfig
+
+
+SettingsTab:Section("Кастомизация оформления")
+local function accentModeLabel(mode)
+    local labels = {
+        solid = "Однотонный",
+        rainbow = "Радужный",
+        gradient = "Градиент",
+    }
+    return labels[mode] or "Однотонный"
+end
+if accentMode ~= "solid" and accentMode ~= "rainbow" and accentMode ~= "gradient" then
+    accentMode = "solid"
+end
+local accentModeButton
+accentModeButton = SettingsTab:Button("Режим акцента: " .. accentModeLabel(accentMode), function()
+    local modes = {"solid", "rainbow", "gradient"}
+    local index = table.find(modes, accentMode) or 1
+    accentMode = modes[index % #modes + 1]
+    Config.AccentMode = accentMode
+    if accentModeButton and accentModeButton.Parent then
+        accentModeButton.Text = "Режим акцента: " .. accentModeLabel(accentMode)
+    end
+    refreshAccentMode()
+    SaveConfig()
+    Notify("Оформление", "Режим: " .. accentModeLabel(accentMode), 2)
+end)
+local gradABox = SettingsTab:Input("Первый цвет градиента (#RRGGBB)", "#000000", function(t)
+    local c = parseHexColor(t)
+    if c then
+        gradientA = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
+        Config.GradientA = gradientA
+        if accentMode == "gradient" then refreshAccentMode() end
+        SaveConfig()
+    end
+end)
+local gradBBox = SettingsTab:Input("Второй цвет градиента (#RRGGBB)", "#FFFFFF", function(t)
+    local c = parseHexColor(t)
+    if c then
+        gradientB = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)}
+        Config.GradientB = gradientB
+        if accentMode == "gradient" then refreshAccentMode() end
+        SaveConfig()
+    end
+end)
+SettingsTab:Slider("Скорость смены цвета", 0.05, 2, gradientSpeed, function(v)
+    gradientSpeed = v Config.GradientSpeed = v SaveConfig()
+end, 2)
+ 
+-- Визуальная палитра для двух точек градиента. HEX-поля остаются как точный ввод.
+local gradientPaletteButton
+local function openGradientPalette(anchorButton)
+    if ScreenGui:FindFirstChild("SiriusGradientPaletteOverlay") then return end
+    local selected = "A"
+    local startColor = colorFromRGB(gradientA)
+    local draftColor = startColor
+    local h, sat, val = draftColor:ToHSV()
+    local opacity = math.clamp(tonumber(Config.GradientOpacity) or 1, 0, 1)
+    local dragging = nil
+    local closing = false
+
+    local overlay = New("TextButton", {
+        Name = "SiriusGradientPaletteOverlay", Text = "", AutoButtonColor = false,
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), ZIndex = 800, Modal = true,
+    }, ScreenGui)
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    local anchorPos = anchorButton and anchorButton.AbsolutePosition or Vector2.new(18, 18)
+    local anchorSize = anchorButton and anchorButton.AbsoluteSize or Vector2.new(0, 0)
+    local popupWidth, popupHeight = 390, 410
+    local popupX = math.clamp(anchorPos.X, 8, math.max(8, viewport.X - popupWidth - 8))
+    local popupY = anchorPos.Y + anchorSize.Y + 8
+    if popupY + popupHeight > viewport.Y - 8 then popupY = anchorPos.Y - popupHeight - 8 end
+    popupY = math.clamp(popupY, 8, math.max(8, viewport.Y - popupHeight - 8))
+    local card = New("Frame", {
+        AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(popupX, popupY),
+        Size = UDim2.new(0, popupWidth, 0, popupHeight), BackgroundColor3 = Theme.Top,
+        BorderSizePixel = 0, ZIndex = 801,
+    }, overlay)
+    Round(card, 16)
+    New("UIStroke", {Color = Theme.Accent, Transparency = 0.35, Thickness = 1.4}, card)
+    local scale = New("UIScale", {Scale = 0.94}, card)
+    Tween(card, 0.24, {Position = UDim2.fromOffset(popupX, popupY)}, Enum.EasingStyle.Back)
+    Tween(scale, 0.24, {Scale = 1}, Enum.EasingStyle.Back)
+
+    local function label(parent, text, pos, size, color, textSize, bold)
+        return New("TextLabel", {BackgroundTransparency=1, Position=pos, Size=size,
+            Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham, Text=text,
+            TextColor3=color or Theme.Text, TextSize=textSize or 12,
+            TextXAlignment=Enum.TextXAlignment.Left, ZIndex=803}, parent)
+    end
+    label(card, "ЦВЕТОВАЯ ПАЛИТРА", UDim2.new(0,18,0,13), UDim2.new(1,-70,0,22), Theme.Text, 15, true)
+    local close = New("TextButton", {Text="×", Font=Enum.Font.GothamBold, TextSize=20,
+        TextColor3=Theme.SubText, BackgroundColor3=Theme.Element, BorderSizePixel=0,
+        Position=UDim2.new(1,-42,0,10), Size=UDim2.new(0,30,0,30), ZIndex=804}, card)
+    Round(close, 9)
+
+    local tabA = New("TextButton", {Text="ЦВЕТ 1", Font=Enum.Font.GothamBold, TextSize=11,
+        TextColor3=Theme.Text, BackgroundColor3=Theme.Accent, BorderSizePixel=0,
+        Position=UDim2.new(0,18,0,48), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
+    Round(tabA, 8)
+    local tabB = New("TextButton", {Text="ЦВЕТ 2", Font=Enum.Font.GothamBold, TextSize=11,
+        TextColor3=Theme.Text, BackgroundColor3=Theme.Element, BorderSizePixel=0,
+        Position=UDim2.new(0,126,0,48), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
+    Round(tabB, 8)
+
+    local sv = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=Color3.new(1,1,1),
+        Position=UDim2.new(0,18,0,91), Size=UDim2.new(0,270,0,154), ZIndex=802}, card)
+    Round(sv, 9)
+    local white = New("Frame", {BackgroundColor3=Color3.new(1,1,1), BorderSizePixel=0,
+        Size=UDim2.new(1,0,1,0), ZIndex=803}, sv)
+    Round(white, 9)
+    New("UIGradient", {Color=ColorSequence.new(Color3.new(1,1,1),Color3.new(1,1,1)),
+        Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)}),
+        Rotation=0}, white)
+    local hueLayer = New("Frame", {BackgroundColor3=Color3.new(1,0,0), BorderSizePixel=0,
+        Size=UDim2.new(1,0,1,0), ZIndex=804}, sv)
+    Round(hueLayer, 9)
+    New("UIGradient", {Color=ColorSequence.new({
+        ColorSequenceKeypoint.new(0,Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1,Color3.new(1,1,1))}), Transparency=NumberSequence.new(1)}, hueLayer)
+    local colorLayer = New("Frame", {BackgroundColor3=Color3.new(1,0,0), BackgroundTransparency=0,
+        BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=805}, sv)
+    Round(colorLayer, 9)
+    New("UIGradient", {Color=ColorSequence.new(Color3.new(1,1,1),Color3.new(1,1,1)),
+        Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)}),
+        Rotation=0}, colorLayer)
+    local darkLayer = New("Frame", {BackgroundColor3=Color3.new(0,0,0), BackgroundTransparency=0,
+        BorderSizePixel=0, Size=UDim2.new(1,0,1,0), ZIndex=806}, sv)
+    Round(darkLayer, 9)
+    New("UIGradient", {Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(1,0)}),
+        Rotation=90}, darkLayer)
+    local selector = New("Frame", {BackgroundTransparency=1, BorderSizePixel=0,
+        Size=UDim2.new(0,12,0,12), AnchorPoint=Vector2.new(0.5,0.5), ZIndex=808}, sv)
+    New("UICorner", {CornerRadius=UDim.new(1,0)}, selector)
+    New("UIStroke", {Color=Color3.new(1,1,1), Thickness=2}, selector)
+
+    local hueBar = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=Color3.new(1,1,1),
+        Position=UDim2.new(0,300,0,91), Size=UDim2.new(0,22,0,154), ZIndex=802}, card)
+    Round(hueBar, 8)
+    New("UIGradient", {Rotation=90, Color=ColorSequence.new({
+        ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),
+        ColorSequenceKeypoint.new(0.17,Color3.fromRGB(255,255,0)),
+        ColorSequenceKeypoint.new(0.33,Color3.fromRGB(0,255,0)),
+        ColorSequenceKeypoint.new(0.5,Color3.fromRGB(0,255,255)),
+        ColorSequenceKeypoint.new(0.67,Color3.fromRGB(0,0,255)),
+        ColorSequenceKeypoint.new(0.83,Color3.fromRGB(255,0,255)),
+        ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0)),
+    })}, hueBar)
+    local hueMark = New("Frame", {BackgroundColor3=Color3.new(1,1,1), BorderSizePixel=0,
+        Size=UDim2.new(1,0,0,4), ZIndex=809}, hueBar)
+    New("UIStroke", {Color=Color3.fromRGB(25,25,30), Thickness=1}, hueMark)
+
+    label(card, "ПРОШЛЫЙ", UDim2.new(0,18,0,257), UDim2.new(0,100,0,16), Theme.SubText, 9, true)
+    label(card, "НОВЫЙ", UDim2.new(0,132,0,257), UDim2.new(0,100,0,16), Theme.SubText, 9, true)
+    local oldSwatch = New("Frame", {BackgroundColor3=startColor, BorderSizePixel=0,
+        Position=UDim2.new(0,18,0,276), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
+    Round(oldSwatch, 7)
+    local newSwatch = New("Frame", {BackgroundColor3=draftColor, BorderSizePixel=0,
+        Position=UDim2.new(0,132,0,276), Size=UDim2.new(0,100,0,30), ZIndex=803}, card)
+    Round(newSwatch, 7)
+    local hexLabel = label(card, "#FFFFFF", UDim2.new(0,245,0,280), UDim2.new(0,125,0,22), Theme.Text, 12, true)
+
+    label(card, "ПРОЗРАЧНОСТЬ", UDim2.new(0,18,0,316), UDim2.new(0,130,0,16), Theme.SubText, 9, true)
+    local alphaBar = New("TextButton", {Text="", AutoButtonColor=false, BackgroundColor3=draftColor,
+        Position=UDim2.new(0,18,0,337), Size=UDim2.new(0,240,0,10), ZIndex=803}, card)
+    Round(alphaBar, 5)
+    New("UIGradient", {Transparency=NumberSequence.new({
+        NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(1,1)})}, alphaBar)
+    local alphaFill = New("Frame", {BackgroundColor3=Theme.Accent, BorderSizePixel=0,
+        Size=UDim2.new(opacity,0,1,0), ZIndex=804}, alphaBar)
+    Round(alphaFill, 5)
+    local alphaValue = label(card, tostring(math.floor(opacity*100+0.5)).."%", UDim2.new(0,270,0,331), UDim2.new(0,60,0,20), Theme.Text, 11, true)
+
+    local apply = New("TextButton", {Text="Применить", Font=Enum.Font.GothamBold, TextSize=12,
+        TextColor3=Color3.new(1,1,1), BackgroundColor3=Theme.Accent, BorderSizePixel=0,
+        Position=UDim2.new(1,-126,1,-48), Size=UDim2.new(0,108,0,32), ZIndex=804}, card)
+    Round(apply, 9)
+    local cancel = New("TextButton", {Text="Отмена", Font=Enum.Font.Gotham, TextSize=11,
+        TextColor3=Theme.SubText, BackgroundColor3=Theme.Element, BorderSizePixel=0,
+        Position=UDim2.new(0,18,1,-48), Size=UDim2.new(0,90,0,32), ZIndex=804}, card)
+    Round(cancel, 9)
+
+    local function refreshPreview()
+        draftColor = Color3.fromHSV(h, sat, val)
+        colorLayer.BackgroundColor3 = Color3.fromHSV(h,1,1)
+        selector.Position = UDim2.new(sat,0,1-val,0)
+        hueMark.Position = UDim2.new(0,0,h, -2)
+        newSwatch.BackgroundColor3 = draftColor
+        hexLabel.Text = string.format("#%02X%02X%02X", math.floor(draftColor.R*255+0.5),
+            math.floor(draftColor.G*255+0.5), math.floor(draftColor.B*255+0.5))
+        alphaBar.BackgroundColor3 = draftColor
+        alphaFill.Size = UDim2.new(opacity,0,1,0)
+        alphaValue.Text = tostring(math.floor(opacity*100+0.5)).."%"
+    end
+    local function selectEndpoint(which)
+        selected = which
+        startColor = colorFromRGB(which == "A" and gradientA or gradientB)
+        draftColor = startColor
+        h,sat,val = draftColor:ToHSV()
+        oldSwatch.BackgroundColor3 = startColor
+        tabA.BackgroundColor3 = which == "A" and Theme.Accent or Theme.Element
+        tabB.BackgroundColor3 = which == "B" and Theme.Accent or Theme.Element
+        refreshPreview()
+    end
+    local function setSV(input)
+        local p = math.clamp((input.Position.X-sv.AbsolutePosition.X)/sv.AbsoluteSize.X,0,1)
+        local q = math.clamp((input.Position.Y-sv.AbsolutePosition.Y)/sv.AbsoluteSize.Y,0,1)
+        sat, val = p, 1-q
+        refreshPreview()
+    end
+    local function setHue(input)
+        h = math.clamp((input.Position.Y-hueBar.AbsolutePosition.Y)/hueBar.AbsoluteSize.Y,0,1)
+        refreshPreview()
+    end
+    local function setOpacity(input)
+        opacity = math.clamp((input.Position.X-alphaBar.AbsolutePosition.X)/alphaBar.AbsoluteSize.X,0,1)
+        refreshPreview()
+    end
+    sv.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="sv" setSV(input) end
+    end)
+    hueBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="hue" setHue(input) end
+    end)
+    alphaBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging="alpha" setOpacity(input) end
+    end)
+    local moveConn = UIS.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging=="sv" then setSV(input) elseif dragging=="hue" then setHue(input) elseif dragging=="alpha" then setOpacity(input) end
+        end
+    end)
+    local endConn = UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging=nil end
+    end)
+    local function closePicker()
+        if closing then return end
+        closing=true
+        moveConn:Disconnect()
+        endConn:Disconnect()
+        Tween(card,0.16,{Position=UDim2.fromOffset(popupX, popupY + 10)},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
+        local shrink = Tween(scale,0.16,{Scale=0.94},Enum.EasingStyle.Quad,Enum.EasingDirection.In)
+        shrink.Completed:Wait()
+        if overlay.Parent then overlay:Destroy() end
+    end
+    tabA.MouseButton1Click:Connect(function() selectEndpoint("A") end)
+    tabB.MouseButton1Click:Connect(function() selectEndpoint("B") end)
+    close.MouseButton1Click:Connect(closePicker)
+    cancel.MouseButton1Click:Connect(closePicker)
+    overlay.MouseButton1Click:Connect(closePicker)
+    apply.MouseButton1Click:Connect(function()
+        local target = {math.floor(draftColor.R*255+0.5),math.floor(draftColor.G*255+0.5),math.floor(draftColor.B*255+0.5)}
+        if selected=="A" then gradientA=target Config.GradientA=target else gradientB=target Config.GradientB=target end
+        Config.GradientOpacity=opacity
+        if accentMode=="gradient" then refreshAccentMode() end
+        SaveConfig()
+        closePicker()
+    end)
+    refreshPreview()
+end
+gradientPaletteButton = SettingsTab:Button("🎨 Открыть палитру цветов", function() openGradientPalette(gradientPaletteButton) end)
+
+local gradientConn
+refreshAccentMode = function()
+    if accentMode == "solid" then
+        updateAccentGradients(nil, nil, true)
+        return
+    end
+    if accentMode == "gradient" then
+        updateAccentGradients(colorFromRGB(gradientA), colorFromRGB(gradientB), false)
+    end
+end
+refreshAccentMode()
+gradientConn = RunService.Heartbeat:Connect(function(dt)
+    if accentMode == "rainbow" then
+        gradientClock += dt * gradientSpeed
+        local hue = (gradientClock * 0.12) % 1
+        updateAccentGradients(Color3.fromHSV(hue, 0.85, 1), Color3.fromHSV((hue + 0.22) % 1, 0.85, 1), false)
+    end
+end)
+OnUnload(function() if gradientConn then gradientConn:Disconnect() end end)
+SettingsTab:Button("Случайный цвет интерфейса", function()
+    -- Полностью случайный RGB/HEX, включая тёмные и нейтральные оттенки.
+    local r, g, b = math.random(0, 255), math.random(0, 255), math.random(0, 255)
+    local color = Color3.fromRGB(r, g, b)
+    local hex = string.format("#%02X%02X%02X", r, g, b)
+    accentMode = "solid"
+    Config.AccentMode = "solid"
+    refreshAccentMode()
+    ApplyAccent(color, true)
+    Notify("Случайный HEX", hex, 3, true)
+end)
 
 SettingsTab:Section("Внешний вид окна")
 local sT = SettingsTab:Slider("Прозрачность фона", 0, 0.85, Config.Transparency, function(v)
@@ -10047,12 +10083,24 @@ do
 
     if getgenv then getgenv().SiriusCheckUpdates = function() checkForUpdates(true) end end
     task.spawn(function()
+        local elapsed = 0
         task.wait(3)
-        checkForUpdates(false)
+        local env = (getgenv and getgenv()) or _G
+        local initialInterval = math.clamp(tonumber(env.SiriusUpdateInterval) or 120, 0, 3600)
+        if initialInterval > 0 then checkForUpdates(false) end
         while ScreenGui.Parent do
-            task.wait(120)
+            task.wait(1)
             if not ScreenGui.Parent then break end
-            checkForUpdates(false)
+            local interval = math.clamp(tonumber(env.SiriusUpdateInterval) or 120, 0, 3600)
+            if interval <= 0 then
+                elapsed = 0
+            else
+                elapsed += 1
+                if elapsed >= interval then
+                    elapsed = 0
+                    checkForUpdates(false)
+                end
+            end
         end
     end)
 end
